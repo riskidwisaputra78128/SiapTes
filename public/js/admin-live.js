@@ -675,7 +675,10 @@ export async function renderAdminLive(app) {
         bubbles.splice(i, 1); continue;
       }
       const ch = [...chars.values()].find(c => c.group === b.obj);
-      place(b.el, toScreen(b.obj, b.offY - (ch?.seated ? 0.4 : 0)));
+      const pt = toScreen(b.obj, b.offY - (ch?.seated ? 0.4 : 0));
+      const hw = (b.w ||= b.el.offsetWidth) / 2 + 8;           // jaga balon tetap di dalam layar
+      pt.x = Math.min(Math.max(pt.x, hw), SW - hw); pt.y = Math.max(pt.y, 40);
+      place(b.el, pt);
     }
   }
   const charByKey = k => chars.get(k) || null;
@@ -787,27 +790,53 @@ export async function renderAdminLive(app) {
   }
   $$('#ccTabs button').forEach(b => (b.onclick = () => selectRoom(b.dataset.cam, true)));
   // ───── Layar penuh ─────
-  const tabsEl = $('#ccTabs'), tabsHome = tabsEl.parentNode, tabsNext = tabsEl.nextSibling;
+  const tabsEl = $('#ccTabs'), tabsHome = tabsEl.parentNode, tabsNext = tabsEl.nextSibling, fsBtn = $('#ccFs');
   const isFull = () => document.fullscreenElement === stage || document.webkitFullscreenElement === stage || stage.classList.contains('cc-full');
+  // Mode cadangan (iPhone/HP yang tidak mendukung Fullscreen API): pindahkan stage ke <body> agar
+  // position:fixed benar-benar menutupi layar (panel kaca/animasi induk bisa "mengurung" elemen fixed).
+  let stageHome = null;
+  function fallbackFull() {
+    if (stage.classList.contains('cc-full')) return;
+    stageHome = document.createComment('cc-stage');
+    stage.parentNode.insertBefore(stageHome, stage);
+    document.body.appendChild(stage);
+    stage.classList.add('cc-full'); document.documentElement.classList.add('cc-lock');
+    scrollTo(0, 0);
+  }
   function enterFull() {
     stage.prepend(tabsEl); tabsEl.classList.add('in-stage');
-    const req = stage.requestFullscreen || stage.webkitRequestFullscreen;
-    if (req) req.call(stage).catch(() => stage.classList.add('cc-full')); else stage.classList.add('cc-full');
-    if (!req) document.body.style.overflow = 'hidden';
-    $('#ccFs').textContent = '✕'; $('#ccFs').title = 'Keluar layar penuh';
+    const req = stage.requestFullscreen || stage.webkitRequestFullscreen || stage.webkitRequestFullScreen;
+    let p = null;
+    try { p = req ? req.call(stage, { navigationUI: 'hide' }) : null; } catch { p = null; }
+    if (p && typeof p.then === 'function') {
+      p.then(() => { try { screen.orientation?.lock?.('landscape').catch(() => {}); } catch {} }).catch(fallbackFull);
+    } else {
+      // Safari lama mengembalikan undefined: cek sebentar apakah benar masuk layar penuh
+      setTimeout(() => { if (!document.fullscreenElement && !document.webkitFullscreenElement) fallbackFull(); }, req ? 300 : 0);
+    }
+    fsBtn.textContent = '✕'; fsBtn.title = 'Keluar layar penuh';
   }
   function exitFull() {
-    if (document.fullscreenElement || document.webkitFullscreenElement) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
-    stage.classList.remove('cc-full'); document.body.style.overflow = '';
-    tabsHome.insertBefore(tabsEl, tabsNext); tabsEl.classList.remove('in-stage');
-    $('#ccFs').textContent = '⛶'; $('#ccFs').title = 'Layar penuh';
+    try { if (document.fullscreenElement || document.webkitFullscreenElement) { const ex = document.exitFullscreen || document.webkitExitFullscreen; const r = ex?.call(document); r?.catch?.(() => {}); } } catch {}
+    try { screen.orientation?.unlock?.(); } catch {}
+    if (stage.classList.contains('cc-full')) {
+      stage.classList.remove('cc-full'); document.documentElement.classList.remove('cc-lock');
+      if (stageHome?.parentNode) { stageHome.parentNode.insertBefore(stage, stageHome); stageHome.remove(); }
+      stageHome = null;
+    }
+    if (tabsNext && tabsNext.parentNode === tabsHome) tabsHome.insertBefore(tabsEl, tabsNext); else tabsHome.appendChild(tabsEl);
+    tabsEl.classList.remove('in-stage');
+    fsBtn.textContent = '⛶'; fsBtn.title = 'Layar penuh';
   }
-  $('#ccFs').onclick = () => { isFull() ? exitFull() : enterFull(); setTimeout(() => { if (!selected) flyTo('overview'); }, 350); };
-  const onFsChange = () => { if (!document.fullscreenElement && !document.webkitFullscreenElement && !stage.classList.contains('cc-full') && tabsEl.classList.contains('in-stage')) exitFull(); };
+  fsBtn.onclick = () => { isFull() ? exitFull() : enterFull(); setTimeout(() => { if (!selected) flyTo('overview'); }, 350); };
+  const onFsChange = () => {
+    if (!document.body.contains(stage)) { document.removeEventListener('fullscreenchange', onFsChange); document.removeEventListener('webkitfullscreenchange', onFsChange); return; }
+    if (!document.fullscreenElement && !document.webkitFullscreenElement && !stage.classList.contains('cc-full') && tabsEl.classList.contains('in-stage')) exitFull(); };
   document.addEventListener('fullscreenchange', onFsChange); document.addEventListener('webkitfullscreenchange', onFsChange);
   const onKey = e => { if (e.key === 'Escape' && stage.classList.contains('cc-full')) exitFull(); if (!document.body.contains(stage)) removeEventListener('keydown', onKey); };
   addEventListener('keydown', onKey);
-  window.addEventListener('hashchange', () => { if (stage.classList.contains('cc-full')) { document.body.style.overflow = ''; } }, { once: true });
+  // keluar halaman saat mode cadangan aktif → bereskan agar tidak tertinggal di <body>
+  window.addEventListener('hashchange', () => { if (stage.classList.contains('cc-full')) { exitFull(); stage.remove(); } }, { once: true });
   function showRoom() {
     const box2 = $('#ccRoomInfo');
     if (!selected) {

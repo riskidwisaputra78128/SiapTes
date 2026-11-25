@@ -1076,3 +1076,9 @@ body.sc-dim #scene[data-scene="pagi"] .sc-tint { background: rgba(255,255,255,.3
 .gen-pick { margin: 14px 0 4px; padding: 12px; border-radius: var(--r-sm); background: var(--w4); border: 1px solid var(--line); }
 .gen-pick .pill { font-size: 12.5px; }
 .gc-tag { font-size: 10px; opacity: .75; margin-left: 2px; }
+/* Layar penuh cadangan (HP tanpa Fullscreen API) */
+html.cc-lock, html.cc-lock body { overflow: hidden !important; overscroll-behavior: none; }
+.cc-stage.cc-full { position: fixed !important; inset: 0 !important; z-index: 2000; width: 100vw !important; height: 100vh; height: 100dvh !important; margin: 0 !important; transform: none !important; animation: none !important; touch-action: none; }
+.cc-stage.cc-full .cc-fs { top: calc(10px + env(safe-area-inset-top, 0px)); right: calc(10px + env(safe-area-inset-right, 0px)); width: 44px; height: 44px; }
+.cc-stage.cc-full .cc-tabs.in-stage { top: calc(10px + env(safe-area-inset-top, 0px)); left: calc(10px + env(safe-area-inset-left, 0px)); }
+html.cc-lock .dock, html.cc-lock .bottomnav, html.cc-lock .topbar { display: none !important; }
