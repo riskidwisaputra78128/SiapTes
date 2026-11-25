@@ -371,10 +371,14 @@ function renderProfile() {
       <h2 class="h2">⚙️ Panel Admin</h2>
       <a class="glass card row tilt" href="#/command" style="gap:14px;margin:12px 0"><span style="font-size:30px">🏢</span>
         <div style="flex:1"><b>Kantor Live / Command Center</b><div class="dim">Kini bisa dibuka semua pengguna lewat menu 🏢 Kantor</div></div><span class="grad-text" style="font-weight:800">Buka →</span></a>
-      <p class="muted" style="margin:6px 0 12px">Buat soal baru dari berita hari ini (Gemini). Otomatis juga berjalan setiap hari pukul 06.00 WIB.</p>
+      <p class="muted" style="margin:6px 0 12px">Buat soal & materi baru dari berita hari ini (Gemini). Keduanya juga berjalan otomatis setiap hari pukul 06.00 WIB.</p>
       <div id="sysStatus" class="dim">Memuat status…</div>
-      <div class="row wrap" style="margin-top:12px"><button class="btn sm" id="genBtn">✨ Generate soal sekarang</button></div>
-      <pre id="genOut" class="dim" style="white-space:pre-wrap;margin:12px 0 0"></pre>
+      <div class="gen-grid">
+        <button class="gen-btn" data-gen="soal"><span class="gi">📝</span><span><b>Generate Soal</b><small>10 soal × 4 topik (PG, esai, interaktif)</small></span></button>
+        <button class="gen-btn" data-gen="materi"><span class="gi">📖</span><span><b>Generate Materi</b><small>1 materi bacaan × 4 topik</small></span></button>
+      </div>
+      <p class="dim" style="margin:8px 0 0">💡 Jalankan satu per satu, beri jeda ±1 menit agar kuota Gemini tidak cepat habis.</p>
+      <pre id="genOut" class="dim" style="white-space:pre-wrap;margin:12px 0 0"></pre><div id="genLinks"></div>
     </div>` : ''}
     <div class="glass card">
       <h2 class="h2">Tentang akun</h2>
@@ -402,19 +406,24 @@ function renderProfile() {
     const loadStatus = () => api('/news?fresh=' + Date.now()).then(d => {
       const st = d.status; const lg = st.lastGenerate;
       $('#sysStatus').innerHTML = `Firebase: <b>${st.firebase ? '✅ aktif' : '⚠️ memori'}</b> · AI: <b>${st.ai ? '✅ aktif' : '⚠️ belum diatur'}</b> · Soal hasil generate: <b>${fmt(st.generatedQuestions)}</b><br>
-        Terakhir generate: ${lg ? `${new Date(lg.at).toLocaleString('id-ID')} (${lg.total} soal, ${lg.materials || 0} materi)` : 'belum pernah'}`;
+        Terakhir generate${lg?.type && lg.type !== 'all' ? ' ' + lg.type : ''}: ${lg ? `${new Date(lg.at).toLocaleString('id-ID')} (${lg.total} soal, ${lg.materials || 0} materi)` : 'belum pernah'}`;
     }).catch(() => {});
     loadStatus();
-    $('#genBtn').onclick = async () => {
-      const b = $('#genBtn'); b.disabled = true; b.innerHTML = '<span class="spinner"></span> Membuat soal…';
+    const genBtns = $$('[data-gen]');
+    genBtns.forEach(b => (b.onclick = async () => {
+      const type = b.dataset.gen, label = b.innerHTML;
+      genBtns.forEach(x => (x.disabled = true));
+      b.innerHTML = `<span class="spinner"></span><span><b>${type === 'soal' ? 'Membuat soal…' : 'Membuat materi…'}</b><small>bisa sampai ±1 menit</small></span>`;
+      $('#genLinks').innerHTML = '';
       try {
-        const r = await api('/generate', { method: 'POST' });
-        $('#genOut').textContent = r.summary.map(s => `${catByKey[s.cat]?.name || s.cat}: ${s.saved} soal, ${s.material || 0} materi${s.reason ? ' — ' + s.reason : ''}`).join('\n');
+        const r = await api('/generate?type=' + type, { method: 'POST' });
+        $('#genOut').textContent = r.summary.map(s => `${catByKey[s.cat]?.name || s.cat}: ${type === 'soal' ? `${s.saved} soal` : `${s.material || 0} materi`}${s.reason ? ' — ' + s.reason : ''}`).join('\n');
         if (r.message) { toast(r.message, 'err'); $('#genOut').textContent = '⚠️ ' + r.message + '\n\n' + $('#genOut').textContent; }
-        else { toast(`${r.total} soal & ${r.materials || 0} materi baru ditambahkan`, 'ok'); if (r.materials) $('#genOut').insertAdjacentHTML('afterend', '<a class="btn ghost sm" href="#/materi?r=1" style="margin-top:10px">📖 Lihat materi terbaru</a>'); }
+        else if (type === 'soal') { toast(`${r.total} soal baru ditambahkan`, 'ok'); if (r.total) $('#genLinks').innerHTML = '<a class="btn ghost sm" href="#/latihan?fresh=1&category=isu" style="margin-top:10px">🎯 Coba soal terbaru</a>'; }
+        else { toast(`${r.materials} materi baru ditambahkan`, 'ok'); if (r.materials) $('#genLinks').innerHTML = '<a class="btn ghost sm" href="#/materi?r=1" style="margin-top:10px">📖 Lihat materi terbaru</a>'; }
       } catch (e) { toast(e.message, 'err'); }
-      b.disabled = false; b.textContent = '✨ Generate soal sekarang'; loadStatus();
-    };
+      genBtns.forEach(x => (x.disabled = false)); b.innerHTML = label; loadStatus();
+    }));
   }
 }
 

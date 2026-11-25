@@ -6,7 +6,7 @@ import { handle, send, httpError, query } from './_lib/http.js';
 import { getUser, isAdmin } from './_lib/auth.js';
 import { getDB } from './_lib/db.js';
 import { aiEnabled, geminiJSON } from './_lib/ai.js';
-import { NEWS_TOPICS, fetchHeadlines } from './_lib/news.js';
+import { NEWS_TOPICS, fetchHeadlines, fetchBackup } from './_lib/news.js';
 import { dayKey } from './_lib/http.js';
 
 const CAT_LABEL = {
@@ -116,13 +116,22 @@ Format JSON:
   };
 }
 
-async function generateFor(cat, T0) {
+// type: 'soal' | 'materi' | 'all'
+async function generateFor(cat, T0, type = 'all') {
   const lists = await Promise.all(NEWS_TOPICS[cat].map(q => fetchHeadlines(q, 6)));
   const seen = new Set();
   const headlines = lists.flat().filter(h => (seen.has(h.title) ? false : seen.add(h.title))).slice(0, 10);
-  if (headlines.length < 2) return { cat, saved: 0, reason: 'berita tidak ditemukan', headlines: [] };
+  let usedBackup = false;
+  if (headlines.length < 3) {                     // Google News gagal/sedikit → pakai ANTARA & CNBC Indonesia
+    const extra = await fetchBackup(cat, 10);
+    extra.forEach(h => { if (!seen.has(h.title) && headlines.length < 10) { seen.add(h.title); headlines.push(h); usedBackup = true; } });
+  }
+  if (headlines.length < 2) return { cat, saved: 0, reason: 'berita tidak ditemukan (Google News & sumber cadangan tidak bisa diakses)', headlines: [] };
 
   const today = new Date().toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', dateStyle: 'long' });
+  const db = await getDB();
+  let saved = 0, list = [];
+  if (type !== 'materi') {
   const out = await geminiJSON(`Kamu penyusun soal tes seleksi kerja Indonesia (CPNS SKD, BUMN/Rekrutmen Bersama, OJK, Bank Indonesia PCPM, Telkom).
 Hari ini ${today}. Topik: ${CAT_LABEL[cat]}.
 
@@ -143,26 +152,34 @@ Format JSON:
 {"questions":[{"type":"pg","difficulty":"normal","question":"...","options":["...","...","...","..."],"answer":0,"explanation":"...","sourceIndex":0},
 {"type":"essay","difficulty":"hard","question":"...","keyPoints":["..."],"modelAnswer":"...","explanation":"...","sourceIndex":1},
 {"type":"interactive","kind":"match","difficulty":"normal","question":"Cocokkan ...","pairs":[{"a":"...","b":"..."}],"explanation":"...","sourceIndex":2},
-{"type":"interactive","kind":"order","difficulty":"hard","question":"Urutkan ...","items":["langkah 1","langkah 2","langkah 3","langkah 4"],"explanation":"...","sourceIndex":3}]}`, { deadline: T0 + 40000 });
+{"type":"interactive","kind":"order","difficulty":"hard","question":"Urutkan ...","items":["langkah 1","langkah 2","langkah 3","langkah 4"],"explanation":"...","sourceIndex":3}]}`, { deadline: T0 + (type === 'soal' ? 55000 : 40000) });
 
-  const list = Array.isArray(out) ? out : out.questions || out.soal || out.items || [];
+  list = Array.isArray(out) ? out : out.questions || out.soal || out.items || [];
   const qs = list.map(q => validate(q, cat, headlines)).filter(Boolean);
   if (list.length && !qs.length) console.warn('[generate] semua soal ditolak validator', cat, JSON.stringify(list[0]).slice(0, 300));
-  const db = await getDB();
-  const saved = qs.length ? await db.addQuestions(qs) : 0;
-  // materi dibuat setelah soal, hanya jika sisa waktu fungsi masih cukup
-  const matDeadline = T0 + 56000;
-  const mat = matDeadline - Date.now() > 12000
-    ? await materialFor(cat, headlines, today, matDeadline).catch(e => { console.error('materi', cat, e.message); return null; })
-    : null;
-  if (mat) { await db.addMaterials([mat]); await db.pruneMaterials(MAX_MATERIALS).catch(e => console.error('prune', e.message)); }
-  return { cat, saved, material: mat ? 1 : 0, headlines, reason: saved ? '' : list.length ? 'format soal dari AI tidak sesuai' : 'AI tidak mengirim soal' };
+  saved = qs.length ? await db.addQuestions(qs) : 0;
+  }
+  let mat = null;
+  if (type !== 'soal') {
+    // materi: jika mode 'all', dibuat setelah soal hanya bila sisa waktu fungsi masih cukup
+    const matDeadline = T0 + (type === 'materi' ? 55000 : 56000);
+    if (matDeadline - Date.now() > 12000) {
+      mat = type === 'materi'
+        ? await materialFor(cat, headlines, today, matDeadline)            // mode materi: error dilaporkan
+        : await materialFor(cat, headlines, today, matDeadline).catch(e => { console.error('materi', cat, e.message); return null; });
+    }
+    if (mat) { await db.addMaterials([mat]); await db.pruneMaterials(MAX_MATERIALS).catch(e => console.error('prune', e.message)); }
+  }
+  const reason = type === 'materi' ? (mat ? '' : 'AI tidak mengirim materi yang valid')
+    : saved ? '' : list.length ? 'format soal dari AI tidak sesuai' : 'AI tidak mengirim soal';
+  return { cat, saved, material: mat ? 1 : 0, headlines, reason };
 }
 
 export default handle(['GET', 'POST'], async (req, res) => {
   const by = authorize(req);
   if (!aiEnabled()) throw httpError(400, 'GEMINI_API_KEY belum diatur. Tambahkan di Environment Variables Vercel.');
 
+  const type = ['soal', 'materi'].includes(query(req).get('type')) ? query(req).get('type') : 'all';
   const all = Object.keys(NEWS_TOPICS);
   const requested = query(req).get('cats');
   let cats;
@@ -181,20 +198,21 @@ export default handle(['GET', 'POST'], async (req, res) => {
   await dbg.setMeta('genStatus', { running: true, at: Date.now(), by, cats }).catch(() => {});
   let results;
   const T0 = Date.now();
-  try { results = await Promise.allSettled(cats.map(c => generateFor(c, T0))); }
+  try { results = await Promise.allSettled(cats.map(c => generateFor(c, T0, type))); }
   finally { await dbg.setMeta('genStatus', { running: false, at: Date.now(), by }).catch(() => {}); }
   const summary = results.map((r, i) => r.status === 'fulfilled'
     ? { cat: r.value.cat, saved: r.value.saved, material: r.value.material || 0, reason: r.value.reason || '' }
-    : { cat: cats[i], saved: 0, reason: r.reason?.quota ? 'kuota Gemini habis' : String(r.reason?.message || r.reason).slice(0, 120) });
+    : { cat: cats[i], saved: 0, material: 0, reason: r.reason?.quota ? 'kuota Gemini habis' : String(r.reason?.message || r.reason).slice(0, 120) });
 
   const headlines = results.flatMap(r => (r.status === 'fulfilled' ? r.value.headlines.slice(0, 3).map(h => ({ ...h, cat: r.value.cat })) : []));
   const db = await getDB();
-  const log = { at: Date.now(), by, summary, total: summary.reduce((s, x) => s + x.saved, 0), materials: summary.reduce((s, x) => s + (x.material || 0), 0) };
+  const log = { at: Date.now(), by, type, summary, total: summary.reduce((s, x) => s + x.saved, 0), materials: summary.reduce((s, x) => s + (x.material || 0), 0) };
   await db.setMeta('lastGenerate', JSON.parse(JSON.stringify(log))).catch(e => console.error('log generate', e.message));
   if (headlines.length) await db.setMeta('news', JSON.parse(JSON.stringify({ at: Date.now(), items: headlines }))).catch(() => {});
   const quota = results.some(r => r.status === 'rejected' && r.reason?.quota);
   const busy = results.some(r => r.status === 'rejected' && /sibuk/.test(r.reason?.message || ''));
-  if (log.total === 0 && busy && !quota) log.message = 'Server Gemini sedang sibuk (banyak pengguna di seluruh dunia). Soal yang sudah ada tetap bisa dipakai. Coba lagi beberapa menit lagi.';
-  if (log.total === 0 && quota) log.message = 'Kuota gratis Gemini sedang habis. Soal yang sudah ada tetap bisa dipakai. Coba lagi nanti (batas per menit cepat pulih, batas harian direset besok).';
+  const nothing = type === 'materi' ? log.materials === 0 : log.total === 0;
+  if (nothing && busy && !quota) log.message = 'Server Gemini sedang sibuk (banyak pengguna di seluruh dunia). Soal & materi yang sudah ada tetap bisa dipakai. Coba lagi beberapa menit lagi.';
+  if (nothing && quota) log.message = 'Kuota gratis Gemini sedang habis. Soal & materi yang sudah ada tetap bisa dipakai. Coba lagi nanti (batas per menit cepat pulih, batas harian direset besok).';
   send(res, 200, log);
 });

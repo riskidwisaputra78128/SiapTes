@@ -771,3 +771,13 @@ button.dp { cursor: pointer; }
 
 .arsip-meter { width: 160px; height: 8px; border-radius: 99px; background: var(--w8); overflow: hidden; }
 .arsip-meter i { display: block; height: 100%; background: var(--grad); border-radius: inherit; }
+
+.gen-grid { display: grid; gap: 10px; margin-top: 12px; }
+@media (min-width: 640px) { .gen-grid { grid-template-columns: 1fr 1fr; } }
+.gen-btn { display: flex; gap: 12px; align-items: center; text-align: left; padding: 14px; border-radius: 16px; background: var(--grad); color: var(--on-accent); box-shadow: 0 5px 0 var(--btn-depth); transition: transform .12s, box-shadow .12s, filter .2s; }
+.gen-btn:active { transform: translateY(3px); box-shadow: 0 2px 0 var(--btn-depth); }
+.gen-btn:disabled { filter: grayscale(.5) brightness(.85); cursor: wait; }
+.gen-btn[data-gen="materi"] { background: var(--grad-warm); box-shadow: 0 5px 0 #a3414f; }
+.gen-btn .gi { font-size: 26px; }
+.gen-btn b { display: block; font-size: 15px; }
+.gen-btn small { display: block; font-size: 12px; opacity: .85; }

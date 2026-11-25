@@ -2,7 +2,7 @@
 import { handle, send, startOfDayWIB } from './_lib/http.js';
 import { getDB, firebaseEnabled } from './_lib/db.js';
 import { aiEnabled } from './_lib/ai.js';
-import { fetchHeadlines } from './_lib/news.js';
+import { fetchHeadlines, fetchBackup } from './_lib/news.js';
 import { SEED_QUESTIONS } from './_lib/seed.js';
 
 const CACHE_MS = 3 * 3600 * 1000;
@@ -36,6 +36,7 @@ export default handle(['GET'], async (req, res) => {
       fetchHeadlines('ekonomi Indonesia', 3), fetchHeadlines('Bank Indonesia OJK', 3), fetchHeadlines('BUMN', 2),
     ]);
     const items = [...eco.map(h => ({ ...h, cat: 'isu' })), ...fin.map(h => ({ ...h, cat: 'bi' })), ...bumn.map(h => ({ ...h, cat: 'bumn' }))];
+    if (items.length < 3) (await fetchBackup('isu', 8)).forEach(h => items.push({ ...h, cat: 'isu' }));
     if (items.length) { news = { at: Date.now(), items }; db.setMeta('news', news).catch(() => {}); }
   }
   const [last, bank] = await Promise.all([db.getMeta('lastGenerate').catch(() => null), questionBank(db)]);
