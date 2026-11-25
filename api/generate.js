@@ -216,19 +216,20 @@ export default handle(['GET', 'POST'], async (req, res) => {
   const dbg = await getDB();
   const running = await dbg.getMeta('genStatus').catch(() => null);
   if (running?.running && Date.now() - running.at < 2 * 60 * 1000) throw httpError(409, 'Generate masih berjalan, tunggu sekitar 1 menit lalu cek lagi.');
-  await dbg.setMeta('genStatus', { running: true, at: Date.now(), by, cats }).catch(() => {});
+  const byUid = getUser(req)?.uid || null;
+  await dbg.setMeta('genStatus', { running: true, at: Date.now(), by, cats, type, byUid }).catch(() => {});
   let results;
   const T0 = Date.now();
   // tiap topik dijeda 1,2 dtk agar tidak menabrak batas per menit Gemini
   try { results = await Promise.allSettled(cats.map((c, i) => new Promise(r => setTimeout(r, i * 1200)).then(() => generateFor(c, T0, type)))); }
-  finally { await dbg.setMeta('genStatus', { running: false, at: Date.now(), by }).catch(() => {}); }
+  finally { await dbg.setMeta('genStatus', { running: false, at: Date.now(), by, type, byUid }).catch(() => {}); }
   const summary = results.map((r, i) => r.status === 'fulfilled'
     ? { cat: r.value.cat, saved: r.value.saved, material: r.value.material || 0, reason: r.value.reason || '' }
     : { cat: cats[i], saved: 0, material: 0, reason: r.reason?.quota ? 'kuota Gemini habis' : String(r.reason?.message || r.reason).slice(0, 120) });
 
   const headlines = results.flatMap(r => (r.status === 'fulfilled' ? r.value.headlines.slice(0, 3).map(h => ({ ...h, cat: r.value.cat })) : []));
   const db = await getDB();
-  const log = { at: Date.now(), by, type, summary, total: summary.reduce((s, x) => s + x.saved, 0), materials: summary.reduce((s, x) => s + (x.material || 0), 0) };
+  const log = { at: Date.now(), by, byUid, type, summary, total: summary.reduce((s, x) => s + x.saved, 0), materials: summary.reduce((s, x) => s + (x.material || 0), 0) };
   await db.setMeta('lastGenerate', JSON.parse(JSON.stringify(log))).catch(e => console.error('log generate', e.message));
   if (headlines.length) await db.setMeta('news', JSON.parse(JSON.stringify({ at: Date.now(), items: headlines }))).catch(() => {});
   const quota = results.some(r => r.status === 'rejected' && r.reason?.quota);

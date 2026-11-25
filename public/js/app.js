@@ -11,6 +11,7 @@ import { renderAdminLive } from './admin-live.js';
 import { startPresence, onlineWidget, isHidden, setHidden, presence, refreshPresence } from './presence.js';
 import { applyTheme, currentTheme, openThemePicker, THEMES } from './theme.js';
 import { mountDock, setDockVisible } from './dock.js';
+import { syncScene, sceneRoute } from './scene.js';
 
 const app = $('#app');
 const NAV = [
@@ -52,6 +53,7 @@ async function route() {
   window.scrollTo(0, 0);
   const inQuiz = path === 'quiz';
   setDockVisible(path !== 'login' && !inQuiz);
+  sceneRoute(path);
   chrome(path !== 'login' && !inQuiz && (authed || path !== 'teknologi'), path);
   app.innerHTML = '';
   try {
@@ -594,6 +596,7 @@ window.addEventListener('beforeunload', e => { if (practice.active) { e.preventD
 
 applyTheme(currentTheme(), { save: false });
 mountDock();
+syncScene();
 if (session.loggedIn) { startPresence(); syncAvatar(); }
 window.addEventListener('hashchange', () => { if (session.loggedIn) startPresence(); });
 $('#themeBtn').onclick = openThemePicker;

@@ -1,5 +1,5 @@
 import { api, session } from './api.js';
-import { $, $$, esc, toast, timeAgo, confetti, countUp } from './ui.js';
+import { $, $$, esc, toast, timeAgo, confetti, countUp, sheet } from './ui.js';
 import { sfx } from './sound.js';
 import { catByKey } from './data.js';
 
@@ -42,12 +42,29 @@ function quizOf(m) {
   });
 }
 
+const isAdminUser = () => !!session.user?.admin;
+// konfirmasi lalu hapus (khusus admin)
+function askDelete(m, onDone) {
+  sheet(`<h3 class="h2">🗑️ Hapus materi?</h3>
+    <p class="muted" style="margin:6px 0 4px"><b>${esc(m.title)}</b></p>
+    <p class="dim" style="margin:0 0 14px">Materi akan dihapus permanen dari arsip untuk semua pengguna dan tidak bisa dikembalikan.</p>
+    <div class="row" style="gap:8px"><button class="btn ghost" id="dNo" style="flex:1">Batal</button><button class="btn danger" id="dYes" style="flex:1">Hapus permanen</button></div>`,
+  (el, close) => {
+    $('#dNo', el).onclick = close;
+    $('#dYes', el).onclick = async () => {
+      const b = $('#dYes', el); b.disabled = true; b.innerHTML = '<span class="spinner"></span> Menghapus…';
+      try { await api('/materials?id=' + encodeURIComponent(m.id), { method: 'DELETE' }); listCache = null; close(); toast('Materi dihapus', 'ok'); onDone?.(); }
+      catch (e) { toast(e.message, 'err'); b.disabled = false; b.textContent = 'Hapus permanen'; }
+    };
+  });
+}
+
 function card(m, read) {
   const c = catByKey[m.category] || {};
   const isNew = m.day === todayKey();
   return `
     <a class="glass mat-card has-cover tilt ${read.has(m.id) ? 'read' : ''}" href="#/materi?id=${encodeURIComponent(m.id)}">
-      <span class="mat-cover">${coverImg(m)}${m.extras ? '<span class="mat-badge">✨ Interaktif</span>' : ''}</span>
+      <span class="mat-cover">${coverImg(m)}${m.extras ? '<span class="mat-badge">✨ Interaktif</span>' : ''}${isAdminUser() && !m.core ? `<button class="mat-del" data-del="${esc(m.id)}" title="Hapus materi" aria-label="Hapus materi">🗑️</button>` : ''}</span>
       <div class="row wrap" style="gap:6px">
         <span class="chip">${c.ico || '📘'} ${esc(c.name || m.category)}</span>
         ${isNew ? '<span class="chip new">BARU</span>' : ''}
@@ -114,6 +131,12 @@ export async function renderMateri(app, params) {
     $$('#catFilter [data-f]', body).forEach(b => (b.onclick = () => { filter = b.dataset.f; draw(); }));
   };
   $$('#matTabs button', app).forEach(b => (b.onclick = () => { tab = b.dataset.t; draw(); history.replaceState(null, '', `#/materi?tab=${tab}`); }));
+  $('#matBody').addEventListener('click', e => {
+    const b = e.target.closest('[data-del]'); if (!b) return;
+    e.preventDefault(); e.stopPropagation();
+    const m = [...data.daily].find(x => x.id === b.dataset.del); if (!m) return;
+    askDelete(m, async () => { const d = await getMaterials(true); Object.assign(data, d); draw(); });
+  });
   $('#matRefresh').onclick = async () => {
     const btn = $('#matRefresh'); btn.disabled = true; btn.innerHTML = '<span class="spinner" style="width:16px;height:16px"></span>';
     try { const d = await getMaterials(true); Object.assign(data, d); draw(); toast(`${d.daily.length} materi harian dimuat`, 'ok'); } catch (e) { toast(e.message, 'err'); }
@@ -139,7 +162,8 @@ async function renderDetail(app, id) {
   app.innerHTML = `
   <div class="read-progress"><i id="readProg"></i></div>
   <article class="stack fade-in mat-article">
-    <a href="#/materi?tab=${m.core ? 'inti' : m.day === todayKey() ? 'hari' : 'arsip'}" class="link-btn" style="font-size:14px">← Kembali ke materi</a>
+    <div class="row between"><a href="#/materi?tab=${m.core ? 'inti' : m.day === todayKey() ? 'hari' : 'arsip'}" class="link-btn" style="font-size:14px">← Kembali ke materi</a>
+      ${isAdminUser() && !m.core ? '<button class="btn ghost sm" id="delMat">🗑️ Hapus materi</button>' : ''}</div>
     <header class="glass mat-hero">
       <div class="mat-hero-img">${coverImg(m)}</div>
       <div class="mat-hero-body">
@@ -233,6 +257,7 @@ async function renderDetail(app, id) {
     el.style.width = (h > 0 ? Math.min(100, (scrollY / h) * 100) : 100) + '%';
   };
   addEventListener('scroll', prog, { passive: true }); prog();
+  $('#delMat')?.addEventListener('click', () => askDelete(m, () => { location.hash = '#/materi?tab=arsip&r=1'; }));
   $('#readBtn').onclick = () => {
     markRead(m.id); confetti(50);
     $('#readBtn').disabled = true; $('#readBtn').textContent = '✓ Sudah dibaca';

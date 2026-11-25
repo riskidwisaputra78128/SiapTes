@@ -1,6 +1,8 @@
 // GET /api/materials           → daftar materi harian (14 hari terakhir) + materi inti
 // GET /api/materials?id=xxx    → isi lengkap satu materi
+// DELETE /api/materials?id=xxx → hapus materi harian (khusus admin)
 import { handle, query, send, httpError } from './_lib/http.js';
+import { requireUser, isAdmin } from './_lib/auth.js';
 import { getDB } from './_lib/db.js';
 import { CORE_MATERIALS } from './_lib/seed-materials.js';
 import { enrichMaterial } from './_lib/ogimage.js';
@@ -11,9 +13,16 @@ const brief = m => ({
   cover: m.cover || null, highlight: (m.stats?.[0] ? `${m.stats[0].value}${m.stats[0].unit ? ' ' + m.stats[0].unit : ''} · ${m.stats[0].label}` : m.keyPoints?.[0]) || null, extras: !!(m.flow?.length || m.stats?.length || m.quiz?.length),
 });
 
-export default handle(['GET'], async (req, res) => {
+export default handle(['GET', 'DELETE'], async (req, res) => {
   const id = query(req).get('id');
   const db = await getDB();
+  if (req.method === 'DELETE') {
+    if (!isAdmin(requireUser(req))) throw httpError(403, 'Hanya admin yang bisa menghapus materi');
+    if (!id || CORE_MATERIALS.some(x => x.id === id)) throw httpError(400, 'Materi inti tidak bisa dihapus');
+    if (!(await db.getMaterial(id))) throw httpError(404, 'Materi tidak ditemukan');
+    await db.deleteMaterial(id);
+    return send(res, 200, { ok: true });
+  }
   if (id) {
     const m = CORE_MATERIALS.find(x => x.id === id) || (await db.getMaterial(id).catch(() => null));
     if (!m) throw httpError(404, 'Materi tidak ditemukan');

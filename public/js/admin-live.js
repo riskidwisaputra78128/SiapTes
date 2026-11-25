@@ -640,18 +640,132 @@ export async function renderAdminLive(app) {
       place(el, toScreen(ch.group, ch.seated ? 1.75 : 2.15));
     }
     for (const [k, el] of tagEls) if (!chars.has(k)) { el.remove(); tagEls.delete(k); }
+    drawBubbles(performance.now());
   }
   function refreshLabels() {
     ROOMS.forEach(r => {
       const n = r.occupants.length;
       let sub = `${n} orang`;
-      if (r.key === 'ai') sub = state.system.generating ? '⚙️ membuat soal…' : `${fmt(state.system.bank)} soal`;
+      if (r.key === 'ai') sub = state.system.generating ? `⚙️ membuat ${state.system.genType === 'materi' ? 'materi' : 'soal'}…` : `${fmt(state.system.bank)} soal`;
       if (r.key === 'duel') sub = `${n} orang · ${state.duels.filter(d => d.playing).length} duel`;
       labelEls[r.key].innerHTML = `<span class="ico">${r.ico}</span><span><b>${r.name}</b><small>${sub}</small></span>${n ? `<span class="cnt">${n}</span>` : ''}`;
       guardEls[r.key].innerHTML = `<b>🤖 ${r.guard.name}</b><small>${r.guard.task(n, state)}</small>`;
     });
-    for (const [k, ch] of chars) { const el = tagEls.get(k); if (el) el.innerHTML = `<b>${esc(ch.u.name)}</b>`; }
+    for (const [k, ch] of chars) { const el = tagEls.get(k); if (el) { ch._emo = exprOf(ch); el.innerHTML = tagHTML(ch); } }
   }
+
+  /* ───── Ekspresi, balon komentar & popup ───── */
+  const bubbles = [];
+  const pick = a => a[Math.floor(Math.random() * a.length)];
+  // obj: grup karakter/penjaga · kind: 'say' (komentar) | 'pop' (perayaan besar)
+  function say(obj, text, { kind = 'say', ms = 3600, offY = 2.6, tone = '' } = {}) {
+    if (!obj || !document.body.contains(stage)) return;
+    for (const b of bubbles) if (b.obj === obj && b.kind === kind) b.until = 0;   // ganti balon lama
+    const el = document.createElement('div');
+    el.className = `cc-${kind} ${tone}`; el.innerHTML = text;
+    if (kind === 'pop') el.insertAdjacentHTML('beforeend', '<i class="cc-conf">' + Array.from({ length: 14 }, (_, i) => `<b style="--a:${i * 26}deg;--d:${(i % 3) * 0.08}s;--c:${['#f472b6', '#facc15', '#22d3ee', '#a78bfa', '#4ade80'][i % 5]}"></b>`).join('') + '</i>');
+    overlay.appendChild(el);
+    bubbles.push({ el, obj, kind, offY, until: performance.now() + ms });
+  }
+  function drawBubbles(now) {
+    for (let i = bubbles.length - 1; i >= 0; i--) {
+      const b = bubbles[i];
+      if (now > b.until || !b.obj.parent) {
+        if (!b.el.classList.contains('out')) { b.el.classList.add('out'); setTimeout(() => b.el.remove(), 320); }
+        bubbles.splice(i, 1); continue;
+      }
+      const ch = [...chars.values()].find(c => c.group === b.obj);
+      place(b.el, toScreen(b.obj, b.offY - (ch?.seated ? 0.4 : 0)));
+    }
+  }
+  const charByKey = k => chars.get(k) || null;
+  const charByName = n => [...chars.values()].find(c => c.u.name === n) || null;
+  // ekspresi kecil di samping nama, sesuai aktivitas
+  function exprOf(ch) {
+    if (ch.override && ch.override.until > performance.now()) return ch.override.emo;
+    if (ch.u._idle) return '😴';
+    const act = ch.spot?.act;
+    return { type: pick(['🤔', '🧐', '✍️']), duel: '😤', read: '📖', eat: '😋', coffee: '☕', cheer: '🥳', play: '😆' }[act] || { latihan: '🤔', quiz: '😤', materi: '📖', duel: '⚔️', evaluasi: '📈', peringkat: '🏆', profil: '😎', kantor: '🤩', beranda: '🙂', teknologi: '🤓' }[ch.u.page] || '🙂';
+  }
+  function tagHTML(ch) { const e = ch._emo || (ch._emo = exprOf(ch)); return `<b><span class="cc-emo">${e}</span>${esc(ch.u.name)}</b>`; }
+  function setOverride(ch, act, emo, ms) { if (!ch) return; ch.override = { act, emo, until: performance.now() + ms }; ch._emo = emo; const el = tagEls.get(ch.u.key); if (el) el.innerHTML = tagHTML(ch); }
+  const LINES = {
+    latihan: ['Hmm, soal ini tricky 🤔', 'Jawabannya C… eh, B? 😅', 'Fokus, fokus! 💪', 'Satu soal lagi!', 'Waktunya mepet ⏱️', 'Oh, ini pernah keluar!'],
+    quiz: ['Bismillah 🙏', 'Jangan panik…', 'Yes, ini aku tahu! ✨', 'Hmm, eliminasi dulu'],
+    materi: ['Oh, gitu ternyata 📖', 'Catat dulu ✍️', 'Ini bakal keluar di tes!', 'BI-Rate naik lagi ya?', 'Menarik juga beritanya 🗞️'],
+    duel: ['Ayo, kalahkan aku! ⚔️', 'Cepetan jawab! ⏱️', 'Skorku nyusul nih 😤', 'GG! 🤝', 'Bot-nya jago juga 🤖'],
+    evaluasi: ['Akurasiku naik 📈', 'TIU masih lemah nih…', 'Streak hari ke-sekian 🔥'],
+    peringkat: ['Kapan ya masuk top 3 🏆', 'Dikit lagi nyalip! 🚀'],
+    profil: ['Ganti foto dulu ah 📷', 'Tema Senja keren juga 🌄'],
+    kantor: ['Wah, kantornya keren 🏢', 'Itu aku ya? 👀'],
+    beranda: ['Mulai dari mana ya?', 'Cek materi terbaru dulu', 'Semangat pagi! ☀️'],
+    teknologi: ['Oh, pakai Firebase toh 🤓'],
+    idle: ['Zzz… 😴', 'Ngopi dulu ☕', 'Rehat 5 menit ya', 'Kopinya enak banget'],
+  };
+  const GUARD_LINES = {
+    ai: s => s.system.generating ? ['Lagi baca berita… 📰', 'Merangkai soal… ⚙️', 'Sebentar lagi jadi!'] : ['Siaga, menunggu jadwal 06.00 ⏰', `Bank soal: ${fmt(s.system.bank)} 📚`],
+    materi: () => ['Selamat membaca 📖', 'Ada materi baru hari ini!'],
+    latihan: () => ['Semangat latihannya! 💪', 'Jangan lupa baca pembahasan'],
+    duel: s => s.duels.some(d => d.playing) ? ['Pertandingan seru! 🔥', 'Siapa yang menang ya?'] : ['Arena siap, ayo duel! ⚔️'],
+    pantry: () => ['Kopi gratis hari ini ☕', 'Jangan lama-lama rehatnya 😉'],
+    akun: () => ['Selamat datang! 👋'],
+  };
+  // obrolan acak setiap beberapa detik
+  const chatter = setInterval(() => {
+    if (!document.body.contains(stage)) return clearInterval(chatter);
+    if (document.hidden || !onScreen) return;
+    const list = [...chars.values()].filter(c => !c.waypoints.length);
+    if (list.length && Math.random() < 0.8) {
+      const ch = pick(list); ch._emo = exprOf(ch); const el = tagEls.get(ch.u.key); if (el) el.innerHTML = tagHTML(ch);
+      const pool = ch.u._idle || ch.room === 'pantry' ? LINES.idle : LINES[ch.u.page] || LINES.beranda;
+      say(ch.group, pick(pool), { ms: 3200, offY: 2.75 });
+    }
+    if (Math.random() < 0.35) {
+      const r = pick(ROOMS.filter(x => GUARD_LINES[x.key] && (x.occupants.length || x.key === 'ai')));
+      if (r) say(guards[r.key], pick(GUARD_LINES[r.key](state)), { ms: 3000, offY: r.key === 'ai' ? 3.1 : 2.8, tone: 'bot' });
+    }
+  }, 4200);
+  // reaksi terhadap peristiwa nyata (dibandingkan dengan data sebelumnya)
+  let prevSys = null; const seenReact = new Set();
+  function react(prevUsers) {
+    const s = state.system, G = guards.ai;
+    const genWho = charByKey(s.genByKey) || charByKey(state.meKey);
+    const what = t => (t === 'materi' ? 'materi' : t === 'soal' ? 'soal' : 'soal & materi');
+    if (prevSys && !prevSys.generating && s.generating) {
+      if (genWho) { say(genWho.group, `Bikin ${what(s.genType)} baru dulu ya 🧠`, { ms: 3800 }); setOverride(genWho, 'stand', '🧠', 6000); }
+      say(G, 'Siap! Lagi baca berita terbaru… 📰', { ms: 4000, offY: 3.1, tone: 'bot' });
+    }
+    const lg = s.lastGenerate;
+    if (prevSys && lg && lg.at !== prevSys.lastGenerate?.at && Date.now() - lg.at < 5 * 60e3) {
+      const who = charByKey(lg.byKey) || genWho;
+      const ok = (lg.total || 0) + (lg.materials || 0) > 0;
+      const msg = ok ? `🎉 Yeay! ${[lg.total ? `+${lg.total} soal` : '', lg.materials ? `+${lg.materials} materi` : ''].filter(Boolean).join(' · ')} baru!` : '😵 Yah, Gemini lagi sibuk…';
+      if (who) { say(who.group, msg, { kind: 'pop', ms: 5200, offY: 3.2, tone: ok ? '' : 'bad' }); setOverride(who, ok ? 'cheer' : 'sad', ok ? '🥳' : '😫', 5000); }
+      else say(G, msg, { kind: 'pop', ms: 5200, offY: 3.4, tone: ok ? '' : 'bad' });
+      say(G, ok ? 'Selesai! Silakan dicoba 📚' : 'Maaf, coba lagi nanti ya 🙏', { ms: 4200, offY: 3.1, tone: 'bot' });
+      if (ok) sfxSafe('win'); else sfxSafe('lose');
+      // penonton lain ikut senang
+      if (ok) [...chars.values()].filter(c => c !== who).slice(0, 4).forEach((c, i) => setTimeout(() => { setOverride(c, 'cheer', '👏', 2500); say(c.group, pick(['Mantap! 👏', 'Asik, soal baru!', 'Gas latihan! 🚀', 'Keren admin! 🙌']), { ms: 2600 }); }, 600 + i * 450));
+    }
+    // hasil latihan baru → reaksi sesuai skor
+    for (const a of state.recent) {
+      const id = a.name + a.createdAt; if (seenReact.has(id)) continue; seenReact.add(id);
+      if (!prevSys || Date.now() - a.createdAt > 3 * 60e3) continue;
+      const c = charByName(a.name); if (!c) continue;
+      if (a.score >= 80) { say(c.group, `Yes! Skor ${a.score} 🔥`, { kind: 'pop', ms: 4200, offY: 3 }); setOverride(c, 'cheer', '🤩', 4500); }
+      else if (a.score >= 60) { say(c.group, `Lumayan, ${a.score} 👍`, { ms: 3600 }); setOverride(c, 'stand', '😊', 4000); }
+      else { say(c.group, `Yah… ${a.score} 😅 coba lagi!`, { ms: 3800, tone: 'sad' }); setOverride(c, 'sad', '😢', 4500); }
+    }
+    // sapaan & pindah ruangan
+    const before = new Map((prevUsers || []).map(u => [u.key, u]));
+    if (prevSys) for (const u of [...state.users, ...demo]) {
+      const c = charByKey(u.key); if (!c) continue; const p = before.get(u.key);
+      if (!p) setTimeout(() => say(c.group, pick(['Halo semua! 👋', 'Selamat datang aku 😄', 'Pagi! Siap belajar ✨']), { ms: 3200 }), 1500);
+      else if (p.page !== u.page) setTimeout(() => say(c.group, pick({ latihan: ['Gas latihan! 💪'], quiz: ['Mulai ujian! 📝'], materi: ['Baca materi dulu 📖'], duel: ['Siapa berani duel? ⚔️'], evaluasi: ['Cek nilai dulu 📈'], peringkat: ['Lihat peringkat 🏆'] }[u.page] || ['Pindah dulu ya 🚶']), { ms: 3000 }), 2500);
+    }
+    prevSys = JSON.parse(JSON.stringify(s));
+  }
+  const sfxSafe = n => import('./sound.js').then(m => m.sfx(n)).catch(() => {});
 
   /* ───── Kamera: tab & terbang ───── */
   let fly = null;
@@ -725,6 +839,7 @@ export async function renderAdminLive(app) {
   const shuffleDemo = () => demo.forEach(u => { if (Math.random() < 0.25) u.page = DEMO_PAGES[Math.floor(Math.random() * DEMO_PAGES.length)]; });
   async function load() {
     if (!document.body.contains(stage)) return false;
+    const prevUsers = [...state.users, ...demo].map(u => ({ key: u.key, page: u.page }));
     try {
       Object.assign(state, await api('/admin-live'));
       state.recent.slice().reverse().forEach(a => { const id = a.name + a.createdAt; if (seenAttempts.has(id)) return; seenAttempts.add(id); feed.push({ id, ico: modeByKey[a.mode]?.ico || '📝', text: `<b>${esc(a.name)}</b> selesai ${modeByKey[a.mode]?.name || a.mode} ${esc(catByKey[a.category]?.name || '')} — skor ${a.score}`, at: a.createdAt }); });
@@ -734,6 +849,7 @@ export async function renderAdminLive(app) {
     if (demoOn) { if (!demo.length) makeDemo(); else shuffleDemo(); } else demo = [];
     window.__ccDemoUsers = demo;
     placeChars([...state.users, ...demo]); refreshLabels(); renderStats(); showRoom();
+    react(prevUsers);
     return true;
   }
   function renderStats() {
@@ -803,7 +919,8 @@ export async function renderAdminLive(app) {
         ch.seated = false;
         continue;
       }
-      const sp = ch.spot || { yaw: 0, sit: false, act: 'stand' };
+      let sp = ch.spot || { yaw: 0, sit: false, act: 'stand' };
+      if (ch.override && ch.override.until > performance.now() && ch.override.act !== 'stand') sp = { ...sp, sit: false, act: ch.override.act };
       let yaw = sp.yaw; const dy = ((yaw - g.rotation.y + Math.PI * 3) % (Math.PI * 2)) - Math.PI; g.rotation.y += dy * k;
       const ph = ud.phase;
       if (sp.sit) {
@@ -819,6 +936,7 @@ export async function renderAdminLive(app) {
         if (sp.act === 'cheer') { ud.armL.rotation.x = ud.armR.rotation.x = -2.8; y += Math.abs(Math.sin(t * 5 + ph)) * 0.25; }
         else if (sp.act === 'play') { ud.armR.rotation.x = -0.6 + Math.sin(t * 6 + ph) * 0.8; ease(ud.armL, k, -0.3); g.rotation.y = yaw + Math.sin(t * 2 + ph) * 0.4; ud.head.rotation.y = Math.sin(t * 6 + ph) * 0.3; }
         else if (sp.act === 'coffee') { const c = Math.max(0, Math.sin(t * 1.2 + ph)); ud.armR.rotation.x = -0.6 - c * 1.5; ease(ud.armL, k, 0); ud.head.rotation.y = Math.sin(t * 0.5 + ph) * 0.4; }
+        else if (sp.act === 'sad') { ease(ud.armL, k, 0.15); ease(ud.armR, k, 0.15); ud.head.rotation.x += (0.45 - ud.head.rotation.x) * k; ud.head.rotation.y = Math.sin(t * 0.7 + ph) * 0.25; y -= 0.03; }
         else { ease(ud.armL, k, 0); ease(ud.armR, k, 0); ud.head.rotation.y = Math.sin(t * 0.8 + ph) * 0.5; ud.head.rotation.x = 0; }
         g.position.y += (y - g.position.y) * Math.min(1, dt * 14);
       }

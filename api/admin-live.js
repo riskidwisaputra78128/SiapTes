@@ -10,7 +10,7 @@ const ONLINE_MS = 2.5 * 60 * 1000;
 const key = uid => crypto.createHash('sha1').update(String(uid)).digest('hex').slice(0, 10);
 
 export default handle(['GET'], async (req, res) => {
-  requireUser(req);
+  const me = requireUser(req);
   const db = await getDB();
   const now = Date.now(), day0 = startOfDayWIB(now);
 
@@ -48,7 +48,7 @@ export default handle(['GET'], async (req, res) => {
   }));
 
   send(res, 200, {
-    serverNow: now,
+    serverNow: now, meKey: key(me.uid),
     users, duels, recent,
     today: {
       sessions: attempts.length, questions: attempts.reduce((s, a) => s + a.total, 0),
@@ -57,8 +57,8 @@ export default handle(['GET'], async (req, res) => {
     },
     system: {
       firebase: firebaseEnabled(), ai: aiEnabled(), bank: SEED_QUESTIONS.length + generated, generated,
-      generating: !!(genStatus?.running && now - genStatus.at < 3 * 60 * 1000), genStartedAt: genStatus?.at || null,
-      lastGenerate: lastGenerate ? { at: lastGenerate.at, total: lastGenerate.total, materials: lastGenerate.materials || 0 } : null,
+      generating: !!(genStatus?.running && now - genStatus.at < 3 * 60 * 1000), genStartedAt: genStatus?.at || null, genType: genStatus?.type || 'all', genByKey: genStatus?.byUid ? key(genStatus.byUid) : null,
+      lastGenerate: lastGenerate ? { at: lastGenerate.at, total: lastGenerate.total, materials: lastGenerate.materials || 0, type: lastGenerate.type || 'all', byKey: lastGenerate.byUid ? key(lastGenerate.byUid) : null } : null,
     },
   });
 });
