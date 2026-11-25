@@ -409,7 +409,8 @@ function renderProfile() {
       try {
         const r = await api('/generate', { method: 'POST' });
         $('#genOut').textContent = r.summary.map(s => `${catByKey[s.cat]?.name || s.cat}: ${s.saved} soal, ${s.material || 0} materi${s.reason ? ' — ' + s.reason : ''}`).join('\n');
-        toast(`${r.total} soal & ${r.materials || 0} materi baru ditambahkan`, 'ok');
+        if (r.message) { toast(r.message, 'err'); $('#genOut').textContent = '⚠️ ' + r.message + '\n\n' + $('#genOut').textContent; }
+        else toast(`${r.total} soal & ${r.materials || 0} materi baru ditambahkan`, 'ok');
       } catch (e) { toast(e.message, 'err'); }
       b.disabled = false; b.textContent = '✨ Generate soal sekarang';
     };

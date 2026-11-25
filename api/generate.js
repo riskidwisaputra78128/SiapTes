@@ -110,7 +110,6 @@ async function generateFor(cat) {
   if (headlines.length < 2) return { cat, saved: 0, reason: 'berita tidak ditemukan', headlines: [] };
 
   const today = new Date().toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', dateStyle: 'long' });
-  const matP = materialFor(cat, headlines, today).catch(e => { console.error('materi', cat, e.message); return null; });
   const out = await geminiJSON(`Kamu penyusun soal tes seleksi kerja Indonesia (CPNS SKD, BUMN/Rekrutmen Bersama, OJK, Bank Indonesia PCPM, Telkom).
 Hari ini ${today}. Topik: ${CAT_LABEL[cat]}.
 
@@ -136,7 +135,7 @@ Format JSON:
   const qs = (out.questions || []).map(q => validate(q, cat, headlines)).filter(Boolean);
   const db = await getDB();
   const saved = qs.length ? await db.addQuestions(qs) : 0;
-  const mat = await matP;
+  const mat = await materialFor(cat, headlines, today).catch(e => { console.error('materi', cat, e.message); return null; });
   if (mat) await db.addMaterials([mat]);
   return { cat, saved, material: mat ? 1 : 0, headlines };
 }
@@ -158,18 +157,24 @@ export default handle(['GET', 'POST'], async (req, res) => {
   }
 
   const dbg = await getDB();
+  const running = await dbg.getMeta('genStatus').catch(() => null);
+  if (running?.running && Date.now() - running.at < 2 * 60 * 1000) throw httpError(409, 'Generate masih berjalan, tunggu sekitar 1 menit lalu cek lagi.');
   await dbg.setMeta('genStatus', { running: true, at: Date.now(), by, cats }).catch(() => {});
   let results;
   try { results = await Promise.allSettled(cats.map(generateFor)); }
   finally { await dbg.setMeta('genStatus', { running: false, at: Date.now(), by }).catch(() => {}); }
   const summary = results.map((r, i) => r.status === 'fulfilled'
     ? { cat: r.value.cat, saved: r.value.saved, material: r.value.material || 0, reason: r.value.reason }
-    : { cat: cats[i], saved: 0, reason: String(r.reason?.message || r.reason).slice(0, 160) });
+    : { cat: cats[i], saved: 0, reason: r.reason?.quota ? 'kuota Gemini habis' : String(r.reason?.message || r.reason).slice(0, 120) });
 
   const headlines = results.flatMap(r => (r.status === 'fulfilled' ? r.value.headlines.slice(0, 3).map(h => ({ ...h, cat: r.value.cat })) : []));
   const db = await getDB();
   const log = { at: Date.now(), by, summary, total: summary.reduce((s, x) => s + x.saved, 0), materials: summary.reduce((s, x) => s + (x.material || 0), 0) };
   await db.setMeta('lastGenerate', log);
   if (headlines.length) await db.setMeta('news', { at: Date.now(), items: headlines });
+  const quota = results.some(r => r.status === 'rejected' && r.reason?.quota);
+  const busy = results.some(r => r.status === 'rejected' && /sibuk/.test(r.reason?.message || ''));
+  if (log.total === 0 && busy && !quota) log.message = 'Server Gemini sedang sibuk (banyak pengguna di seluruh dunia). Soal yang sudah ada tetap bisa dipakai. Coba lagi beberapa menit lagi.';
+  if (log.total === 0 && quota) log.message = 'Kuota gratis Gemini sedang habis. Soal yang sudah ada tetap bisa dipakai. Coba lagi nanti (batas per menit cepat pulih, batas harian direset besok).';
   send(res, 200, log);
 });
