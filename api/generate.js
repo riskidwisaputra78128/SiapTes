@@ -17,6 +17,18 @@ const CAT_LABEL = {
   keuangan: 'perbankan, LPS, pembayaran digital & literasi keuangan',
   isu: 'isu terkini ekonomi, sosial & kebijakan nasional',
   twk: 'wawasan kebangsaan, konstitusi, lembaga negara & hukum',
+  tiu: 'Tes Intelegensia Umum (verbal, numerik, logika)',
+  tkp: 'Tes Karakteristik Pribadi (perilaku kerja)',
+  english: 'Bahasa Inggris untuk tes kerja (grammar, vocabulary, reading)',
+};
+// Topik tanpa berita: soal dibuat dari kisi-kisi resmi, sub-topik diacak tiap generate agar bervariasi
+const EVERGREEN = {
+  tiu: { sub: ['sinonim', 'antonim', 'analogi kata', 'silogisme/penarikan kesimpulan', 'deret angka', 'deret huruf', 'aritmetika sosial (untung, rugi, diskon)', 'perbandingan senilai & berbalik nilai', 'soal cerita kecepatan-jarak-waktu', 'pecahan & persen', 'logika analitis (posisi/urutan duduk)', 'pengelompokan kata'],
+    rule: 'Soal TIU gaya SKD CPNS/BUMN. Untuk numerik, pastikan hitungan benar dan cantumkan langkah ringkas di "explanation". Hindari soal figural/gambar.' },
+  tkp: { sub: ['pelayanan publik', 'jejaring kerja', 'sosial budaya', 'teknologi informasi & komunikasi', 'profesionalisme', 'anti radikalisme', 'integritas & anti korupsi', 'kerja sama tim', 'inisiatif & semangat berprestasi', 'adaptasi perubahan'],
+    rule: 'Soal TKP gaya SKD: studi kasus situasi kerja, 4 opsi respons yang semuanya terdengar wajar. "answer" = respons PALING ideal (proaktif, solutif, berintegritas, berorientasi layanan). "explanation" jelaskan kenapa paling ideal dan kenapa opsi lain kurang. Tidak ada esai menghafal.' },
+  english: { sub: ['tenses', 'subject-verb agreement', 'passive voice', 'conditional sentences', 'vocabulary in context (banking/finance)', 'synonyms', 'prepositions', 'reading comprehension (short business email)', 'error recognition', 'gerund & infinitive'],
+    rule: 'Soal Bahasa Inggris gaya tes rekrutmen bank/BUMN/OJK (mirip TOEIC/TOEFL ITP). Pertanyaan & opsi dalam bahasa Inggris, "explanation" dalam bahasa Indonesia. Untuk reading, sertakan teks pendek (3-5 kalimat) di dalam "question".' },
 };
 const DIFFS = ['easy', 'normal', 'hard', 'prof'];
 export const MAX_MATERIALS = 50; // arsip materi harian: maksimal 50, yang terlama dihapus otomatis
@@ -136,7 +148,34 @@ Format JSON:
 }
 
 // type: 'soal' | 'materi' | 'all'
+async function generateEvergreen(cat, T0, type) {
+  if (type === 'materi') return { cat, saved: 0, material: 0, headlines: [], reason: 'materi harian hanya untuk topik berita (pakai Generate Soal)' };
+  const E = EVERGREEN[cat];
+  const subs = [...E.sub].sort(() => Math.random() - 0.5).slice(0, 5);
+  const out = await geminiJSON(`Kamu penyusun soal tes seleksi kerja Indonesia (CPNS SKD, BUMN/Rekrutmen Bersama, OJK, Bank Indonesia PCPM, Telkom).
+Topik: ${CAT_LABEL[cat]}. Sub-topik untuk sesi ini: ${subs.join(', ')}. Kode variasi: ${Date.now().toString(36)} (buat soal baru yang berbeda dari biasanya).
+
+Buat 10 soal: 8 pilihan ganda (type "pg") dan 2 soal interaktif (type "interactive").
+Aturan:
+- ${E.rule}
+- Sebar tingkat kesulitan: easy, normal, hard, prof.
+- Pilihan ganda: tepat 4 opsi tanpa huruf di depan, satu jawaban benar, pengecoh masuk akal, JANGAN pakai "semua benar"/"semua salah".
+- "explanation": 1-3 kalimat.
+- Interaktif #1 kind "match": 4 pasangan {"a","b"} (mis. kata ↔ sinonim, situasi ↔ sikap ideal); setiap "b" unik.
+- Interaktif #2 kind "order": 4-6 item dalam URUTAN YANG BENAR di "items" (mis. deret dari kecil ke besar, langkah penyelesaian masalah), urutannya jelas.
+Format JSON:
+{"questions":[{"type":"pg","difficulty":"normal","question":"...","options":["...","...","...","..."],"answer":0,"explanation":"..."},
+{"type":"interactive","kind":"match","difficulty":"normal","question":"Cocokkan ...","pairs":[{"a":"...","b":"..."}],"explanation":"..."},
+{"type":"interactive","kind":"order","difficulty":"hard","question":"Urutkan ...","items":["...","...","...","..."],"explanation":"..."}]}`, { deadline: T0 + 55000 });
+  const list = Array.isArray(out) ? out : out.questions || out.soal || out.items || [];
+  const qs = list.map(q => validate(q, cat, [])).filter(Boolean);
+  const db = await getDB();
+  const saved = qs.length ? await db.addQuestions(qs) : 0;
+  return { cat, saved, material: 0, headlines: [], reason: saved ? '' : list.length ? 'format soal dari AI tidak sesuai' : 'AI tidak mengirim soal' };
+}
+
 async function generateFor(cat, T0, type = 'all') {
+  if (!NEWS_TOPICS[cat]) return generateEvergreen(cat, T0, type);
   const lists = await Promise.all(NEWS_TOPICS[cat].map(q => fetchHeadlines(q, 6)));
   const seen = new Set();
   const headlines = lists.flat().filter(h => (seen.has(h.title) ? false : seen.add(h.title))).slice(0, 10);
@@ -202,15 +241,17 @@ export default handle(['GET', 'POST'], async (req, res) => {
 
   const type = ['soal', 'materi'].includes(query(req).get('type')) ? query(req).get('type') : 'all';
   const all = Object.keys(NEWS_TOPICS);
+  const pickable = [...all, ...Object.keys(EVERGREEN)];
   const requested = query(req).get('cats');
   let cats;
-  if (requested) cats = requested.split(',').filter(c => all.includes(c)).slice(0, 4);
-  else {
+  if (requested) {
+    cats = [...new Set(requested.split(','))].filter(c => (type === 'materi' ? all : pickable).includes(c)).slice(0, 4);
+    if (!cats.length) throw httpError(400, type === 'materi' ? 'Topik yang dipilih tidak punya materi berita. Pilih topik berita (Isu, TWK, OJK, BI, BUMN, Telkom, Perbankan).' : 'Pilih minimal 1 topik');
+  } else {
     // Rotasi harian: 3 kategori + isu terkini, agar muat dalam batas waktu fungsi
     const dayIdx = Math.floor(Date.now() / 86400000);
     const rot = all.filter(c => c !== 'isu');
-    cats = ['isu', ...[0, 1, 2].map(i => rot[(dayIdx * 3 + i) % rot.length])];
-    cats = [...new Set(cats)];
+    cats = [...new Set(['isu', ...[0, 1, 2].map(i => rot[(dayIdx * 3 + i) % rot.length])])];
   }
 
   const dbg = await getDB();

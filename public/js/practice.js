@@ -1,5 +1,17 @@
 import { api, session, getInfo } from './api.js';
 import { $, $$, esc, toast, ring, animateRings, confetti, vibrate, sheet, icons, mmss, fmt, countUp } from './ui.js';
+
+// Ingat soal yang sudah pernah keluar di perangkat ini, agar main lagi dapat soal berbeda
+const SEEN_KEY = 'sl_seen_q';
+const qkey = id => String(id || '').slice(-8);
+function seenKeys() { try { return JSON.parse(localStorage.getItem(SEEN_KEY) || '[]'); } catch { return []; } }
+function rememberSeen(list) {
+  try {
+    const ks = list.map(q => qkey(q.id)).filter(Boolean);
+    const cur = seenKeys().filter(k => !ks.includes(k));
+    localStorage.setItem(SEEN_KEY, JSON.stringify([...cur, ...ks].slice(-600)));
+  } catch {}
+}
 import { sfx } from './sound.js';
 import { CATEGORIES, MODES, DIFFS, catByKey, modeByKey, diffByKey } from './data.js';
 import { runInteractive } from './interactive.js';
@@ -97,8 +109,9 @@ export function renderSetup(app, params) {
   $('#startBtn').onclick = async () => {
     const btn = $('#startBtn'); btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
     try {
-      const qs = new URLSearchParams({ category: cfg.category, difficulty: cfg.difficulty, mode: cfg.mode, limit: cfg.count, fresh: cfg.fresh ? '1' : '0' });
+      const qs = new URLSearchParams({ category: cfg.category, difficulty: cfg.difficulty, mode: cfg.mode, limit: cfg.count, fresh: cfg.fresh ? '1' : '0', seen: seenKeys().slice(-300).join(',') });
       const data = await api('/questions?' + qs);
+      rememberSeen(data.questions);
       if (!data.questions.length) throw new Error('Soal untuk pilihan ini belum tersedia. Coba materi/level lain.');
       if (data.filled) toast(`Soal level ${diffByKey[cfg.difficulty].name} terbatas, dilengkapi dari level terdekat.`);
       practice.config = { ...cfg };

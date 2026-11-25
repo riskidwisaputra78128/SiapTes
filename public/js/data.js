@@ -1,7 +1,7 @@
 export const CATEGORIES = [
   { key: 'campuran', name: 'Campuran Semua Materi', ico: '🎯', tags: 'Semua tes', color: '#818cf8' },
   { key: 'isu', name: 'Isu Terkini & Berita', ico: '📰', tags: 'Update harian', color: '#22d3ee', fresh: true },
-  { key: 'twk', name: 'Wawasan Kebangsaan (TWK)', ico: '🇮🇩', tags: 'CPNS · BUMN', color: '#f87171' },
+  { key: 'twk', name: 'Wawasan Kebangsaan (TWK)', ico: '🦅', tags: 'CPNS · BUMN', color: '#f87171' },
   { key: 'tiu', name: 'Intelegensia Umum (TIU)', ico: '🧠', tags: 'CPNS · BUMN · TKD', color: '#a78bfa' },
   { key: 'tkp', name: 'Karakteristik Pribadi (TKP)', ico: '🤝', tags: 'CPNS · BUMN', color: '#34d399' },
   { key: 'ojk', name: 'OJK & Regulasi Keuangan', ico: '🏛️', tags: 'OJK · Perbankan', color: '#fbbf24' },

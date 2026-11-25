@@ -519,6 +519,13 @@ function renderProfile() {
         <div style="flex:1"><b>Kantor Live / Command Center</b><div class="dim">Kini bisa dibuka semua pengguna lewat menu 🏢 Kantor</div></div><span class="grad-text" style="font-weight:800">Buka →</span></a>
       <p class="muted" style="margin:6px 0 12px">Buat soal & materi baru dari berita hari ini (Gemini). Keduanya juga berjalan otomatis setiap hari pukul 06.00 WIB.</p>
       <div id="sysStatus" class="dim">Memuat status…</div>
+      <div class="gen-pick">
+        <div class="row between wrap" style="gap:6px"><b>🎯 Topik yang di-generate</b><span class="dim" id="genPickInfo"></span></div>
+        <div class="pill-group" id="genCats" style="margin-top:8px">
+          <button class="pill" data-gc="auto">🔄 Otomatis</button>
+          ${CATEGORIES.slice(1).map(c => `<button class="pill" data-gc="${c.key}">${c.ico} ${c.name.replace(/ \(.*\)/, '').replace(' & Berita', '').replace(' & Regulasi Keuangan', '').replace(' & Moneter', '').replace(' & AKHLAK', '').replace(' & Digital', '').replace(' & Keuangan', '')}${['tiu', 'tkp', 'english'].includes(c.key) ? ' <small class="gc-tag">soal saja</small>' : ''}</button>`).join('')}
+        </div>
+      </div>
       <div class="gen-grid">
         <button class="gen-btn" data-gen="soal"><span class="gi">📝</span><span><b>Generate Soal</b><small>10 soal × 4 topik (PG, esai, interaktif)</small></span></button>
         <button class="gen-btn" data-gen="materi"><span class="gi">📖</span><span><b>Generate Materi</b><small>1 materi bacaan × 4 topik</small></span></button>
@@ -572,6 +579,24 @@ function renderProfile() {
       $$('[data-fb]').forEach(b => (b.onclick = async () => { b.disabled = true; await api('/presence?op=feedback', { method: 'POST', body: { action: 'done', id: b.dataset.fb, done: b.dataset.done === '1' } }).catch(e => toast(e.message, 'err')); loadFb(); }));
     }).catch(e => { $('#fbList').innerHTML = `<div class="empty">${esc(e.message)}</div>`; });
     loadFb();
+    // pilihan topik (maks 4 per generate, agar muat dalam batas waktu server ±60 dtk)
+    const NEWS = ['isu', 'twk', 'ojk', 'bi', 'bumn', 'telkom', 'keuangan'];
+    let pickCats = (() => { try { return JSON.parse(localStorage.getItem('sl_gen_cats') || '[]'); } catch { return []; } })();
+    const paintPick = () => {
+      $$('#genCats [data-gc]').forEach(b => b.classList.toggle('on', b.dataset.gc === 'auto' ? !pickCats.length : pickCats.includes(b.dataset.gc)));
+      const ev = pickCats.filter(c => !NEWS.includes(c));
+      $('#genPickInfo').textContent = !pickCats.length ? 'rotasi harian: Isu + 3 topik berita' : `${pickCats.length}/4 dipilih${ev.length ? ' · TIU/TKP/Inggris hanya untuk Generate Soal' : ''}`;
+      try { localStorage.setItem('sl_gen_cats', JSON.stringify(pickCats)); } catch {}
+    };
+    $$('#genCats [data-gc]').forEach(b => (b.onclick = () => {
+      const k = b.dataset.gc;
+      if (k === 'auto') pickCats = [];
+      else if (pickCats.includes(k)) pickCats = pickCats.filter(x => x !== k);
+      else if (pickCats.length >= 4) return toast('Maksimal 4 topik per generate (batas waktu server)', 'err');
+      else pickCats = [...pickCats, k];
+      paintPick();
+    }));
+    paintPick();
     const genBtns = $$('[data-gen]');
     genBtns.forEach(b => (b.onclick = async () => {
       const type = b.dataset.gen, label = b.innerHTML;
@@ -579,10 +604,12 @@ function renderProfile() {
       b.innerHTML = `<span class="spinner"></span><span><b>${type === 'soal' ? 'Membuat soal…' : 'Membuat materi…'}</b><small>bisa sampai ±1 menit</small></span>`;
       $('#genLinks').innerHTML = '';
       try {
-        const r = await api('/generate?type=' + type, { method: 'POST' });
+        const cats = type === 'materi' ? pickCats.filter(c => NEWS.includes(c)) : pickCats;
+        if (type === 'materi' && pickCats.length && !cats.length) throw new Error('Topik yang dipilih (TIU/TKP/Inggris) tidak punya materi berita. Tambahkan topik berita atau pilih Otomatis.');
+        const r = await api('/generate?type=' + type + (cats.length ? '&cats=' + cats.join(',') : ''), { method: 'POST' });
         $('#genOut').textContent = r.summary.map(s => `${catByKey[s.cat]?.name || s.cat}: ${type === 'soal' ? `${s.saved} soal` : `${s.material || 0} materi`}${s.reason ? ' — ' + s.reason : ''}`).join('\n');
         if (r.message) { toast(r.message, 'err'); $('#genOut').textContent = '⚠️ ' + r.message + '\n\n' + $('#genOut').textContent; }
-        else if (type === 'soal') { toast(`${r.total} soal baru ditambahkan`, 'ok'); if (r.total) $('#genLinks').innerHTML = '<a class="btn ghost sm" href="#/latihan?fresh=1&category=isu" style="margin-top:10px">🎯 Coba soal terbaru</a>'; }
+        else if (type === 'soal') { toast(`${r.total} soal baru ditambahkan`, 'ok'); if (r.total) $('#genLinks').innerHTML = '<a class="btn ghost sm" href="#/latihan?fresh=1&category=' + (cats[0] || 'isu') + '" style="margin-top:10px">🎯 Coba soal terbaru</a>'; }
         else { toast(`${r.materials} materi baru ditambahkan`, 'ok'); if (r.materials) $('#genLinks').innerHTML = '<a class="btn ghost sm" href="#/materi?r=1" style="margin-top:10px">📖 Lihat materi terbaru</a>'; }
       } catch (e) { toast(e.message, 'err'); }
       genBtns.forEach(x => (x.disabled = false)); b.innerHTML = label; loadStatus();

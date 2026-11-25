@@ -11,6 +11,7 @@ export default handle(['GET'], async (req, res) => {
     type: mode === 'essay' ? 'essay' : mode === 'interaktif' ? 'interactive' : 'pg',
     limit: Math.min(Math.max(parseInt(p.get('limit') || '10', 10) || 10, 1), 50),
     fresh: p.get('fresh') === '1',
+    seen: (p.get('seen') || '').split(',').filter(Boolean).slice(-300),
   });
   send(res, 200, result);
 });

@@ -1073,3 +1073,6 @@ body.sc-dim #scene[data-scene="sakura"] .sc-tint { background: rgba(255, 246, 25
 body.sc-dim #scene[data-scene="pagi"] .sc-kb { filter: blur(8px) brightness(1.05); }
 body.sc-dim #scene[data-scene="pagi"] .sc-tint { background: rgba(255,255,255,.3); }
 .malam-twinkle {}
+.gen-pick { margin: 14px 0 4px; padding: 12px; border-radius: var(--r-sm); background: var(--w4); border: 1px solid var(--line); }
+.gen-pick .pill { font-size: 12.5px; }
+.gc-tag { font-size: 10px; opacity: .75; margin-left: 2px; }
