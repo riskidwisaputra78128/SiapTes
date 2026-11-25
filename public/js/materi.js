@@ -126,7 +126,7 @@ async function renderDetail(app, id) {
   const { material: m } = await api('/materials?id=' + encodeURIComponent(id));
   const c = catByKey[m.category] || {};
   const read = readSet().has(m.id);
-  const imgs = (m.images || []).slice(m.cover ? 1 : 0);
+  const imgs = (m.images || []).filter(x => x.url !== m.cover);
   const quiz = quizOf(m);
   const fig = (im, i) => `<figure class="glass mat-fig" style="animation-delay:${i * .05}s">
       <img src="${esc(im.url)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.closest('figure').remove()">
@@ -165,11 +165,12 @@ async function renderDetail(app, id) {
       <div class="flow">${m.flow.map((f, i) => `<button class="flow-step ${i === 0 ? 'on' : ''}" data-i="${i}"><span class="flow-ico">${esc(f.icon || '➡️')}</span><b>${esc(f.title)}</b></button>${i < m.flow.length - 1 ? '<span class="flow-arrow">➜</span>' : ''}`).join('')}</div>
       <div class="flow-desc" id="flowDesc">${esc(m.flow[0].desc || '')}</div></div>` : ''}
 
-    ${m.sections.map((s, i) => `
-      <section class="glass card mat-sec" style="animation-delay:${i * 0.06}s">
-        <h2 class="h2"><span class="sec-no">${s.icon ? esc(s.icon) : i + 1}</span>${esc(s.heading)}</h2>
-        ${s.body.split(/\n+/).map(p => `<p>${esc(p)}</p>`).join('')}
-      </section>${i % 2 === 0 && imgs[i / 2] ? fig(imgs[i / 2], i) : ''}`).join('')}
+    ${m.sections.map((s, i) => { const im = imgs[i]; return `
+      <section class="glass card mat-sec ${im ? 'with-img' : ''}" style="animation-delay:${i * 0.06}s">
+        ${im ? `<a class="sec-img" href="${esc(im.link || '#')}" target="_blank" rel="noopener"><img src="${esc(im.url)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.closest('.mat-sec').classList.remove('with-img');this.parentNode.remove()"><span>📷 ${esc(im.source || 'Sumber')}</span></a>` : ''}
+        <div class="sec-txt"><h2 class="h2"><span class="sec-no">${s.icon ? esc(s.icon) : i + 1}</span>${esc(s.heading)}</h2>
+        ${s.body.split(/\n+/).map(p => `<p>${esc(p)}</p>`).join('')}</div>
+      </section>`; }).join('')}
 
     ${m.glossary?.length ? `<div class="glass card"><h2 class="h2" style="margin-bottom:12px">📒 Istilah penting <span class="dim" style="font-weight:600">· ketuk kartu</span></h2>
       <div class="gloss-grid">${m.glossary.map(g => `

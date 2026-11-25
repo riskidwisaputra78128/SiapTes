@@ -875,3 +875,9 @@ button.dp { cursor: pointer; }
 @keyframes shake { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
 .mq-why { margin-top: 8px; padding: 10px 12px; border-radius: 12px; font-size: 13.5px; line-height: 1.5; animation: fadeIn .3s both; }
 .mq-why.ok { background: rgba(52,211,153,.1); } .mq-why.no { background: rgba(248,113,113,.1); }
+.mat-sec.with-img { display: grid; gap: 16px; align-items: start; }
+@media (min-width: 760px) { .mat-sec.with-img { grid-template-columns: 300px 1fr; } .mat-sec.with-img:nth-of-type(even) { grid-template-columns: 1fr 300px; } .mat-sec.with-img:nth-of-type(even) .sec-img { order: 2; } }
+.sec-img { position: relative; display: block; border-radius: 14px; overflow: hidden; aspect-ratio: 16 / 10; background: var(--w8); }
+.sec-img img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .5s; }
+.sec-img:hover img { transform: scale(1.05); }
+.sec-img span { position: absolute; left: 8px; bottom: 8px; padding: 3px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; color: #fff; background: rgba(15,23,42,.7); }

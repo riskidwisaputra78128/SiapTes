@@ -89,11 +89,11 @@ ${headlines.map((h, i) => `${i}: ${h.title} — ${h.source}`).join('\n')}
 Tulis SATU materi belajar harian berbahasa Indonesia yang merangkum perkembangan terbaru di atas dan mengaitkannya dengan konsep yang sering diujikan.
 Aturan:
 - Hanya gunakan fakta yang jelas dari judul berita + pengetahuan umum yang mapan (dasar hukum, fungsi lembaga, konsep ekonomi). Jangan mengarang angka, tanggal, atau kutipan.
-- Gaya ringkas, jelas, mudah dipahami pelajar.
+- Gaya ringkas, jelas, mudah dipahami pelajar. Teks pendek; utamakan poin, angka, dan alur (akan ditampilkan sebagai visual).
 Format JSON:
 {"title":"judul menarik maks 80 karakter",
  "summary":"2-3 kalimat ringkasan",
- "sections":[{"icon":"1 emoji","heading":"...","body":"1 paragraf 3-5 kalimat"}],   // 3-4 bagian: apa yang terjadi, konsep/dasar hukum terkait, dampak, kaitan dengan tes
+ "sections":[{"icon":"1 emoji","heading":"...","body":"2-3 kalimat singkat"}],   // 3-4 bagian: apa yang terjadi, konsep/dasar hukum terkait, dampak, kaitan dengan tes
  "stats":[{"value":"6","unit":"%","label":"proyeksi pertumbuhan 2027","icon":"1 emoji"}],  // 0-4 angka penting, HANYA angka yang tertulis di judul berita; kosongkan jika tidak ada
  "flow":[{"icon":"1 emoji","title":"maks 4 kata","desc":"1 kalimat"}],  // 3-5 langkah alur sebab → akibat / mekanisme kebijakan
  "quiz":[{"q":"pertanyaan cek pemahaman","options":["a","b","c","d"],"answer":0,"why":"1 kalimat alasan"}],  // tepat 2 soal

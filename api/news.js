@@ -3,6 +3,7 @@ import { handle, send, startOfDayWIB } from './_lib/http.js';
 import { getDB, firebaseEnabled } from './_lib/db.js';
 import { aiEnabled } from './_lib/ai.js';
 import { fetchHeadlines, backupAll, CAT_KEYWORDS } from './_lib/news.js';
+import { imageForNews } from './_lib/ogimage.js';
 import { SEED_QUESTIONS } from './_lib/seed.js';
 
 const CACHE_MS = 3 * 3600 * 1000;
@@ -30,7 +31,7 @@ async function questionBank(db) {
 
 export default handle(['GET'], async (req, res) => {
   const db = await getDB();
-  let news = await db.getMeta('news2').catch(() => null);
+  let news = await db.getMeta('news3').catch(() => null);
   if (!news || Date.now() - news.at > CACHE_MS) {
     const [eco, fin, bumn, extra] = await Promise.all([
       fetchHeadlines('ekonomi Indonesia', 4), fetchHeadlines('Bank Indonesia OJK', 3), fetchHeadlines('BUMN', 2),
@@ -44,8 +45,15 @@ export default handle(['GET'], async (req, res) => {
     const g = [...eco.map(h => ({ ...h, cat: 'isu' })), ...fin.map(h => ({ ...h, cat: 'bi' })), ...bumn.map(h => ({ ...h, cat: 'bumn' }))];
     const seen = new Set();
     const items = [...pics, ...g].filter(i => { const k = i.title.toLowerCase().slice(0, 50); return seen.has(k) ? false : seen.add(k); })
-      .sort((a, b) => (b.date + (b.image ? 6 * 3600e3 : 0)) - (a.date + (a.image ? 6 * 3600e3 : 0))).slice(0, 10);
-    if (items.length) { news = { at: Date.now(), items }; db.setMeta('news2', news).catch(() => {}); }
+      .sort((a, b) => b.date - a.date).slice(0, 10);
+    // berita tanpa foto (Google News) → ambil foto dari artikel aslinya
+    const timer = new Promise(r => setTimeout(r, 7000));
+    await Promise.all(items.slice(0, 6).map(async it => {
+      if (it.image) return;
+      const img = await Promise.race([imageForNews(it, extra).catch(() => null), timer.then(() => null)]);
+      if (img) it.image = img;
+    }));
+    if (items.length) { news = { at: Date.now(), items }; db.setMeta('news3', news).catch(() => {}); }
   }
   const [last, bank] = await Promise.all([db.getMeta('lastGenerate').catch(() => null), questionBank(db)]);
   res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=60');
