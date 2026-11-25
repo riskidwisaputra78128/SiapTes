@@ -52,8 +52,11 @@ function firestoreBackend(fs) {
       const snap = await ref.limit(600).get();
       return snap.docs.map(d => d.data()).filter(q => !type || q.type === type);
     },
-    async countQuestions() {
-      const snap = await Q.count().get();
+    async countQuestions({ category, sinceMs } = {}) {
+      let ref = Q;
+      if (category) ref = ref.where('category', '==', category);
+      if (sinceMs) ref = ref.where('createdAt', '>=', sinceMs);
+      const snap = await ref.count().get();
       return snap.data().count;
     },
     async addAttempt(a) { const r = await A.add(a); return r.id; },
@@ -79,7 +82,9 @@ function memoryBackend() {
     async listQuestions({ category, type }) {
       return [...g.q.values()].filter(q => (!category || category === 'campuran' || q.category === category) && (!type || q.type === type));
     },
-    async countQuestions() { return g.q.size; },
+    async countQuestions({ category, sinceMs } = {}) {
+      return [...g.q.values()].filter(q => (!category || q.category === category) && (!sinceMs || q.createdAt >= sinceMs)).length;
+    },
     async addAttempt(a) { g.a.push(a); return String(g.a.length); },
     async listAttemptsByUser(uid, sinceMs = 0) { return g.a.filter(a => a.uid === uid && a.createdAt >= sinceMs); },
     async listAttemptsSince(sinceMs) { return g.a.filter(a => a.createdAt >= sinceMs); },

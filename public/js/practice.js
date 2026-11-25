@@ -1,6 +1,7 @@
-import { api, session } from './api.js';
+import { api, session, getInfo } from './api.js';
 import { $, $$, esc, toast, ring, animateRings, confetti, vibrate, sheet, icons, mmss, fmt, countUp } from './ui.js';
 import { CATEGORIES, MODES, DIFFS, catByKey, modeByKey, diffByKey } from './data.js';
+import { runInteractive } from './interactive.js';
 
 export const practice = { config: null, questions: [], result: null, active: false };
 const L = ['A', 'B', 'C', 'D'];
@@ -36,7 +37,7 @@ export function renderSetup(app, params) {
     difficulty: diffByKey[params.get('difficulty')] ? params.get('difficulty') : 'normal',
     count: 10, fresh: params.get('fresh') === '1',
   };
-  const counts = () => (cfg.mode === 'essay' ? [3, 5, 8] : [5, 10, 20, 30]);
+  const counts = () => (cfg.mode === 'essay' ? [3, 5, 8] : cfg.mode === 'interaktif' ? [5, 8, 12] : [5, 10, 20, 30]);
 
   app.innerHTML = `
   <section class="fade-in">
@@ -54,7 +55,7 @@ export function renderSetup(app, params) {
       <div class="row" style="margin-bottom:12px"><span class="step-no">2</span><b>Materi</b></div>
       <div class="cat-grid">${CATEGORIES.map(c => `
         <button class="glass cat-card tilt" data-cat="${c.key}"><span class="glow" style="background:${c.color}"></span>
-        <span class="ico">${c.ico}</span><b>${c.name}</b><small>${c.tags}</small></button>`).join('')}</div>
+        <span class="ico">${c.ico}</span><b>${c.name}</b><small>${c.tags}</small><span class="cat-count" data-count="${c.key}"></span></button>`).join('')}</div>
       <label class="row dim" style="margin-top:12px;cursor:pointer"><input type="checkbox" id="freshChk" ${cfg.fresh ? 'checked' : ''}> Prioritaskan soal dari berita terbaru</label>
     </div>
 
@@ -80,11 +81,15 @@ export function renderSetup(app, params) {
     $$('[data-n]', app).forEach(b => (b.onclick = () => { cfg.count = +b.dataset.n; sync(); }));
     const d = diffByKey[cfg.difficulty];
     $('#sumTitle').textContent = `${modeByKey[cfg.mode].name} · ${catByKey[cfg.category].name}`;
-    $('#sumSub').textContent = `${d.name} · ${cfg.count} soal · ${cfg.mode === 'game' ? d.gameSec + ' dtk/soal' : cfg.mode === 'pg' ? '±' + Math.round((cfg.count * d.sec) / 60) + ' menit' : 'tanpa batas waktu'}`;
+    $('#sumSub').textContent = `${d.name} · ${cfg.count} soal · ${cfg.mode === 'game' ? d.gameSec + ' dtk/soal' : cfg.mode === 'pg' ? '±' + Math.round((cfg.count * d.sec) / 60) + ' menit' : cfg.mode === 'interaktif' ? 'santai, tanpa timer' : 'tanpa batas waktu'}`;
   };
   $$('[data-mode]', app).forEach(b => (b.onclick = () => { cfg.mode = b.dataset.mode; sync(); }));
   $$('[data-cat]', app).forEach(b => (b.onclick = () => { cfg.category = b.dataset.cat; sync(); }));
   $$('[data-diff]', app).forEach(b => (b.onclick = () => { cfg.difficulty = b.dataset.diff; sync(); }));
+  getInfo().then(d => {
+    if (!d.bank) return;
+    $$('[data-count]', app).forEach(el => { const n = d.bank.byCategory?.[el.dataset.count]; if (n != null) el.textContent = `${fmt(n)} soal`; });
+  }).catch(() => {});
   $('#freshChk').onchange = e => (cfg.fresh = e.target.checked);
   sync();
 
@@ -113,6 +118,7 @@ export function renderQuiz(app) {
   const m = practice.config.mode;
   if (m === 'game') return runGame(app);
   if (m === 'essay') return runEssay(app);
+  if (m === 'interaktif') return runInteractive(app, practice, { complete, metaHTML, srcHTML, confirmExit });
   return runPG(app);
 }
 
@@ -487,6 +493,14 @@ export function renderResult(app) {
 
 function reviewItem(x, i) {
   const q = x.q;
+  if (q.type === 'interactive') {
+    const ans = q.kind === 'match' ? q.pairs.map(p => `${esc(p.a)} → ${esc(p.b)}`).join('<br>')
+      : q.kind === 'sort' ? q.buckets.map(b => `<b>${esc(b.name)}:</b> ${b.items.map(esc).join(', ')}`).join('<br>')
+      : q.kind === 'chart' ? q.chart.labels.map((l, k) => `${esc(l)} = ${q.chart.values[k]}`).join(' · ') + ' ' + esc(q.chart.unit || '')
+      : q.kind === 'words' ? esc(q.items.join(' ')) : q.items.map((t, k) => `${k + 1}. ${esc(t)}`).join('<br>');
+    return `<div class="review-item"><div class="row" style="align-items:flex-start"><span>${x.ok ? '✅' : x.ratio >= 0.5 ? '◐' : '❌'}</span><b>${i + 1}. ${esc(q.question)}</b><span class="chip" style="margin-left:auto">${Math.round(x.ratio * 100)}%</span></div>
+      <div class="ans"><span style="color:var(--green)">${ans}</span>${q.explanation ? `<span class="muted">${esc(q.explanation)}</span>` : ''}</div></div>`;
+  }
   if (q.type === 'essay') {
     return `<div class="review-item"><div class="row between"><b>${i + 1}. ${esc(q.question)}</b><span class="verdict ${x.grade.verdict}">${x.grade.score}</span></div>
       <div class="ans"><span class="dim">Jawabanmu:</span><span>${esc(x.answer)}</span><span class="dim" style="margin-top:6px">Acuan:</span><span class="muted">${esc(q.modelAnswer)}</span></div></div>`;

@@ -17,6 +17,7 @@ export const MODES = [
   { key: 'pg', name: 'Pilihan Ganda', ico: '📝', cls: 'mi-pg', desc: 'Simulasi ujian A–D dengan timer, navigasi soal, dan pembahasan.' },
   { key: 'game', name: 'Arena Game', ico: '🎮', cls: 'mi-game', desc: '3 nyawa, waktu per soal, combo poin, dan power-up 50:50.' },
   { key: 'essay', name: 'Esai + Koreksi', ico: '✍️', cls: 'mi-essay', desc: 'Jawab dengan kata-katamu sendiri, dikoreksi maksudnya otomatis.' },
+  { key: 'interaktif', name: 'Interaktif Visual', ico: '🧩', cls: 'mi-visual', desc: 'Susun urutan & kalimat, cocokkan, kelompokkan, dan bangun grafik.' },
 ];
 export const modeByKey = Object.fromEntries(MODES.map(m => [m.key, m]));
 

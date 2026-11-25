@@ -3,7 +3,7 @@ import { handle, readBody, send, httpError, dayKey } from './_lib/http.js';
 import { requireUser } from './_lib/auth.js';
 import { getDB } from './_lib/db.js';
 
-const MODES = ['pg', 'game', 'essay'];
+const MODES = ['pg', 'game', 'essay', 'interaktif'];
 const DIFFS = ['easy', 'normal', 'hard', 'prof', 'all'];
 const num = (v, max) => Math.max(0, Math.min(max, Math.round(Number(v) || 0)));
 

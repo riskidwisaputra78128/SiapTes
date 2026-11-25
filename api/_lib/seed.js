@@ -1,3 +1,4 @@
+import { SEED_INTERACTIVE } from './seed-interactive.js';
 // Bank soal awal (materi stabil). Soal berbasis berita terbaru ditambahkan otomatis oleh /api/generate.
 // Format PG: P(id, kategori, level, soal, [A,B,C,D], indexJawaban, pembahasan)
 // Format Esai: E(id, kategori, level, soal, [poin kunci], jawabanAcuan)
@@ -171,3 +172,4 @@ export const SEED_QUESTIONS = [
     ['Helps manage money/budgeting', 'Encourages saving and investing wisely', 'Avoids bad debt or scams (illegal online loans)', 'Prepares for long-term financial goals'],
     'Financial literacy helps young people manage their income through budgeting and distinguishing needs from wants. It encourages good habits such as saving regularly and investing wisely. It also protects them from bad debt and financial scams, including illegal online loans. In the long run, it prepares them to reach goals like buying a home and preparing for retirement.'),
 ];
+SEED_QUESTIONS.push(...SEED_INTERACTIVE);

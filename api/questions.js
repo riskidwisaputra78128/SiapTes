@@ -1,4 +1,4 @@
-// GET /api/questions?category=bi&difficulty=normal&mode=pg|game|essay&limit=10&fresh=1
+// GET /api/questions?category=bi&difficulty=normal&mode=pg|game|essay|interaktif&limit=10&fresh=1
 import { handle, query, send } from './_lib/http.js';
 import { getDB } from './_lib/db.js';
 import { SEED_QUESTIONS } from './_lib/seed.js';
@@ -22,7 +22,7 @@ export default handle(['GET'], async (req, res) => {
   const category = p.get('category') || 'campuran';
   const difficulty = DIFFS.includes(p.get('difficulty')) ? p.get('difficulty') : 'all';
   const mode = p.get('mode') || 'pg';
-  const type = mode === 'essay' ? 'essay' : 'pg';
+  const type = mode === 'essay' ? 'essay' : mode === 'interaktif' ? 'interactive' : 'pg';
   const limit = Math.min(Math.max(parseInt(p.get('limit') || '10', 10) || 10, 1), 50);
   const fresh = p.get('fresh') === '1';
 

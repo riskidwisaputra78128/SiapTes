@@ -1,9 +1,10 @@
-import { api, session } from './api.js';
+import { api, session, getInfo } from './api.js';
 import { $, $$, esc, toast, bindTilt, icons, fmt, timeAgo, countUp } from './ui.js';
 import { CATEGORIES, TARGETS, catByKey } from './data.js';
 import { initBackground } from './three-bg.js';
 import { renderSetup, renderQuiz, renderResult, practice } from './practice.js';
 import { renderStats, renderLeaderboard } from './stats.js';
+import { renderTech } from './tech.js';
 
 const app = $('#app');
 const NAV = [
@@ -11,6 +12,7 @@ const NAV = [
   { href: '#/latihan', key: 'latihan', label: 'Latihan', ico: icons.play },
   { href: '#/evaluasi', key: 'evaluasi', label: 'Evaluasi', ico: icons.chart },
   { href: '#/peringkat', key: 'peringkat', label: 'Peringkat', ico: icons.trophy },
+  { href: '#/teknologi', key: 'teknologi', label: 'Teknologi', ico: icons.chip },
   { href: '#/profil', key: 'profil', label: 'Profil', ico: icons.user },
 ];
 
@@ -29,11 +31,11 @@ async function route() {
   const [path, qs] = location.hash.replace(/^#\/?/, '').split('?');
   const params = new URLSearchParams(qs || '');
   const authed = session.loggedIn || session.guest;
-  if (!authed && path !== 'login') { location.hash = '#/login'; return; }
+  if (!authed && path !== 'login' && path !== 'teknologi') { location.hash = '#/login'; return; }
   if (session.loggedIn && path === 'login') { location.hash = '#/'; return; }
   window.scrollTo(0, 0);
   const inQuiz = path === 'quiz';
-  chrome(path !== 'login' && !inQuiz, path);
+  chrome(path !== 'login' && !inQuiz && (authed || path !== 'teknologi'), path);
   app.innerHTML = '';
   try {
     switch (path) {
@@ -44,6 +46,7 @@ async function route() {
       case 'evaluasi': await renderStats(app); break;
       case 'peringkat': await renderLeaderboard(app); break;
       case 'profil': renderProfile(); break;
+      case 'teknologi': renderTech(app); break;
       default: await renderHome();
     }
   } catch (e) {
@@ -64,6 +67,7 @@ function renderAuth() {
       <h1 class="hero-title">Latihan cerdas,<br><span class="grad-text">lolos seleksi impian.</span></h1>
       <p class="muted" style="max-width:520px">Satu tempat untuk persiapan tes OJK, Bank Indonesia, Telkom, CPNS, BUMN, dan TKD. Pilih gaya belajarmu: ujian klasik, arena game, atau esai yang dikoreksi.</p>
       <div class="exam-badges"><span>CPNS SKD</span><span>BUMN</span><span>OJK</span><span>Bank Indonesia</span><span>Telkom</span><span>TKD</span></div>
+      <div class="bank-pill" id="bankPill" hidden></div>
       <div class="feature-list">
         <div><i>📝</i><span><b style="color:var(--text)">3 mode latihan</b> — Pilihan Ganda, Arena Game, dan Esai dengan koreksi maksud jawaban.</span></div>
         <div><i>📈</i><span><b style="color:var(--text)">Evaluasi harian, mingguan, bulanan</b> lengkap dengan rekomendasi belajar.</span></div>
@@ -80,7 +84,7 @@ function renderAuth() {
         <div class="field reg" hidden><label for="fTarget">Target tes</label>
           <select id="fTarget" class="input">${TARGETS.map(t => `<option>${t}</option>`).join('')}</select></div>
         <button class="btn block" id="authBtn" type="submit">Masuk</button>
-        <p class="dim" style="text-align:center;margin:0">Belum mau daftar? <button type="button" class="link-btn" id="guestBtn">Coba sebagai tamu</button><br><small>(progres tamu tidak tersimpan)</small></p>
+        <p class="dim" style="text-align:center;margin:0">Belum mau daftar? <button type="button" class="link-btn" id="guestBtn">Coba sebagai tamu</button><br><small>(progres tamu tidak tersimpan)</small><br><a href="#/teknologi" class="link-btn" style="font-size:13px">⚙️ Teknologi di balik SiapLolos</a></p>
       </form>
     </div>
   </section>`;
@@ -96,6 +100,11 @@ function renderAuth() {
   $('#guestBtn').onclick = () => { session.setGuest(); location.hash = '#/'; };
   $('#forgotBtn').onclick = () => renderForgot($('.auth-card'), $('#fEmail').value);
   bindPwToggles(app);
+  getInfo().then(d => {
+    const el = $('#bankPill'); if (!el || !d.bank) return;
+    el.hidden = false;
+    el.innerHTML = `📚 <b>${fmt(d.bank.total)}</b> soal tersedia${d.bank.today ? ` · ✨ <b>${fmt(d.bank.today)}</b> baru hari ini` : ''}`;
+  }).catch(() => {});
   $('#authForm').onsubmit = async e => {
     e.preventDefault();
     const btn = $('#authBtn'); btn.disabled = true; const label = btn.textContent; btn.innerHTML = '<span class="spinner"></span>';
@@ -189,6 +198,22 @@ function renderForgot(card, prefill = '') {
   step1();
 }
 
+/* ───────── Jumlah bank soal (publik) ───────── */
+function renderBank(bank) {
+  const el = $('#bankCard'); if (!el || !bank) return;
+  el.innerHTML = `
+    <div class="bank-row">
+      <div class="bank-big"><span class="bank-ico">📚</span><div><div class="bank-num" id="bankNum">0</div><div class="dim">soal tersedia untuk semua pengguna</div></div></div>
+      <div class="bank-stats">
+        <div><b>${fmt(bank.seed)}</b><span class="dim">bank inti</span></div>
+        <div><b class="grad-text">${fmt(bank.generated)}</b><span class="dim">dari berita</span></div>
+        <div><b style="color:var(--green)">+${fmt(bank.today)}</b><span class="dim">baru hari ini</span></div>
+      </div>
+    </div>`;
+  countUp($('#bankNum'), bank.total, 1000);
+  $$('[data-count]').forEach(c => { const n = bank.byCategory?.[c.dataset.count]; if (n != null) c.textContent = `${fmt(n)} soal`; });
+}
+
 /* ───────── Beranda ───────── */
 async function renderHome() {
   const u = session.user;
@@ -221,8 +246,11 @@ async function renderHome() {
       <a class="glass mode-card tilt" href="#/latihan?mode=pg"><span class="mode-icon mi-pg">📝</span><span><b>Pilihan Ganda</b><br><span class="dim">Simulasi ujian A–D + pembahasan</span></span></a>
       <a class="glass mode-card tilt" href="#/latihan?mode=game"><span class="mode-icon mi-game">🎮</span><span><b>Arena Game</b><br><span class="dim">Nyawa, combo, power-up</span></span></a>
       <a class="glass mode-card tilt" href="#/latihan?mode=essay"><span class="mode-icon mi-essay">✍️</span><span><b>Esai + Koreksi</b><br><span class="dim">Jawab sendiri, dikoreksi maksudnya</span></span></a>
+      <a class="glass mode-card tilt" href="#/latihan?mode=interaktif"><span class="mode-icon mi-visual">🧩</span><span><b>Interaktif Visual</b><br><span class="dim">Susun, cocokkan, bangun grafik</span></span></a>
     </div>
   </section>
+
+  <section class="section"><div class="glass bank-card" id="bankCard"><div class="skeleton" style="height:56px"></div></div></section>
 
   <section class="section">
     <div class="section-head"><h2 class="h2">Materi tes</h2><a href="#/latihan">Lihat semua →</a></div>
@@ -231,6 +259,7 @@ async function renderHome() {
         <a class="glass cat-card tilt" href="#/latihan?category=${c.key}">
           <span class="glow" style="background:${c.color}"></span>
           <span class="ico">${c.ico}</span><b>${c.name}</b><small>${c.tags}${c.fresh ? ' · <span class="chip new" style="padding:1px 6px">BARU</span>' : ''}</small>
+          <span class="cat-count" data-count="${c.key}"></span>
         </a>`).join('')}
     </div>
   </section>
@@ -248,7 +277,8 @@ async function renderHome() {
 
   $('#toLogin')?.addEventListener('click', () => { session.clear(); location.hash = '#/login'; });
 
-  api('/news').then(d => {
+  getInfo().then(d => {
+    renderBank(d.bank);
     const el = $('#newsList'); if (!el) return;
     el.innerHTML = d.items.length ? d.items.slice(0, 5).map(n => `
       <div class="news-item"><span class="dot"></span><div>
@@ -319,7 +349,7 @@ function renderProfile() {
     $$('#profStats .v').forEach((el, i) => (el.textContent = i === 1 ? v[i] + '%' : fmt(v[i])));
   }).catch(() => {});
   if (u.admin) {
-    api('/news').then(d => {
+    getInfo().then(d => {
       const st = d.status; const lg = st.lastGenerate;
       $('#sysStatus').innerHTML = `Firebase: <b>${st.firebase ? '✅ aktif' : '⚠️ memori'}</b> · AI: <b>${st.ai ? '✅ aktif' : '⚠️ belum diatur'}</b> · Soal hasil generate: <b>${fmt(st.generatedQuestions)}</b><br>
         Terakhir generate: ${lg ? `${new Date(lg.at).toLocaleString('id-ID')} (${lg.total} soal)` : 'belum pernah'}`;

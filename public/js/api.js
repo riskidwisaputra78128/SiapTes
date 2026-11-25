@@ -11,6 +11,15 @@ export const session = {
   clear() { [KEY_T, KEY_U, KEY_G].forEach(k => localStorage.removeItem(k)); },
 };
 
+// Info publik (berita + jumlah bank soal), di-cache 60 detik agar tidak dipanggil berulang
+let infoCache = null;
+export function getInfo() {
+  if (!infoCache || Date.now() - infoCache.at > 60000) {
+    infoCache = { at: Date.now(), p: api('/news').catch(e => { infoCache = null; throw e; }) };
+  }
+  return infoCache.p;
+}
+
 export async function api(path, { method = 'GET', body } = {}) {
   const headers = { 'Content-Type': 'application/json' };
   if (session.token) headers.Authorization = 'Bearer ' + session.token;
