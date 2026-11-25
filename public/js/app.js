@@ -411,7 +411,7 @@ function renderProfile() {
         const r = await api('/generate', { method: 'POST' });
         $('#genOut').textContent = r.summary.map(s => `${catByKey[s.cat]?.name || s.cat}: ${s.saved} soal, ${s.material || 0} materi${s.reason ? ' — ' + s.reason : ''}`).join('\n');
         if (r.message) { toast(r.message, 'err'); $('#genOut').textContent = '⚠️ ' + r.message + '\n\n' + $('#genOut').textContent; }
-        else toast(`${r.total} soal & ${r.materials || 0} materi baru ditambahkan`, 'ok');
+        else { toast(`${r.total} soal & ${r.materials || 0} materi baru ditambahkan`, 'ok'); if (r.materials) $('#genOut').insertAdjacentHTML('afterend', '<a class="btn ghost sm" href="#/materi?r=1" style="margin-top:10px">📖 Lihat materi terbaru</a>'); }
       } catch (e) { toast(e.message, 'err'); }
       b.disabled = false; b.textContent = '✨ Generate soal sekarang'; loadStatus();
     };

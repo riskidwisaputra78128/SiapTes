@@ -18,7 +18,7 @@ function dayLabel(day) {
 
 let listCache = null;
 export async function getMaterials(force = false) {
-  if (!listCache || force || Date.now() - listCache.at > 60000) listCache = { at: Date.now(), p: api('/materials') };
+  if (!listCache || force || Date.now() - listCache.at > 20000) listCache = { at: Date.now(), p: api('/materials' + (force ? '?t=' + Date.now() : '')).catch(e => { listCache = null; throw e; }) };
   return listCache.p;
 }
 
@@ -47,11 +47,12 @@ export async function renderMateri(app, params) {
   <section class="stack fade-in">
     <div class="row between wrap">
       <div><h1 class="h1">📖 Materi belajar</h1><p class="muted" style="margin:0">Rangkuman berita terbaru setiap pagi + materi inti setiap tes.</p></div>
-      <div class="tabs" id="matTabs"><button data-t="harian">🗞️ Update Harian</button><button data-t="inti">📚 Materi Inti</button></div>
+      <div class="row" style="gap:8px"><div class="tabs" id="matTabs"><button data-t="harian">🗞️ Update Harian</button><button data-t="inti">📚 Materi Inti</button></div>
+      <button class="icon-btn" id="matRefresh" title="Muat ulang" aria-label="Muat ulang">🔄</button></div>
     </div>
     <div id="matBody"><div class="skeleton" style="height:240px"></div></div>
   </section>`;
-  const data = await getMaterials();
+  const data = await getMaterials(params.get('r') === '1');
   const read = readSet();
   const draw = () => {
     $$('#matTabs button', app).forEach(b => b.classList.toggle('on', b.dataset.t === tab));
@@ -76,6 +77,11 @@ export async function renderMateri(app, params) {
     }
   };
   $$('#matTabs button', app).forEach(b => (b.onclick = () => { tab = b.dataset.t; draw(); history.replaceState(null, '', `#/materi?tab=${tab}`); }));
+  $('#matRefresh').onclick = async () => {
+    const btn = $('#matRefresh'); btn.disabled = true; btn.innerHTML = '<span class="spinner" style="width:16px;height:16px"></span>';
+    try { const d = await getMaterials(true); Object.assign(data, d); draw(); toast(`${d.daily.length} materi harian dimuat`, 'ok'); } catch (e) { toast(e.message, 'err'); }
+    btn.disabled = false; btn.textContent = '🔄';
+  };
   draw();
 }
 

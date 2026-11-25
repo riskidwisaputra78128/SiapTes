@@ -39,7 +39,7 @@ export default handle(['GET'], async (req, res) => {
     if (items.length) { news = { at: Date.now(), items }; db.setMeta('news', news).catch(() => {}); }
   }
   const [last, bank] = await Promise.all([db.getMeta('lastGenerate').catch(() => null), questionBank(db)]);
-  res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
+  res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=60');
   send(res, 200, {
     items: (news?.items || []).slice(0, 8),
     updatedAt: news?.at || null,

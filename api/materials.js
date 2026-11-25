@@ -20,6 +20,6 @@ export default handle(['GET'], async (req, res) => {
   }
   let daily = [];
   try { daily = await db.listMaterials(60); } catch (e) { console.error('listMaterials', e.message); }
-  res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
+  res.setHeader('Cache-Control', 'public, s-maxage=20, stale-while-revalidate=30');
   send(res, 200, { daily: daily.map(brief), core: CORE_MATERIALS.map(brief) });
 });

@@ -57,8 +57,19 @@ function validate(q, cat, headlines) {
     if (keyPoints.length < 2) return null;
     return { ...base, type: 'essay', modelAnswer: String(q.modelAnswer || ''), keyPoints, id: id(cat, base.question) };
   }
-  const options = (q.options || []).map(o => String(o).replace(/^[A-D][.)]\s*/, '').trim());
-  const answer = Number(q.answer);
+  // Toleran terhadap variasi format dari model AI
+  let rawOpts = q.options || q.choices || q.pilihan || [];
+  if (rawOpts && !Array.isArray(rawOpts) && typeof rawOpts === 'object') rawOpts = Object.values(rawOpts);
+  const options = rawOpts.map(o => String(typeof o === 'object' && o ? (o.text ?? o.option ?? Object.values(o)[0]) : o).replace(/^\s*[A-Da-d][.):]\s*/, '').trim());
+  let ans = q.answer ?? q.correct ?? q.answerIndex ?? q.kunci;
+  let answer = NaN;
+  if (typeof ans === 'number') answer = ans;
+  else if (typeof ans === 'string') {
+    const t = ans.trim();
+    if (/^[A-Da-d]([.):].*)?$/.test(t)) answer = 'ABCD'.indexOf(t[0].toUpperCase());
+    else if (/^\d+$/.test(t)) answer = Number(t);
+    else answer = options.findIndex(o => o.toLowerCase() === t.replace(/^\s*[A-Da-d][.):]\s*/, '').toLowerCase());
+  }
   if (options.length !== 4 || options.some(o => !o) || !(answer >= 0 && answer <= 3)) return null;
   return { ...base, type: 'pg', options, answer, id: id(cat, base.question) };
 }
@@ -132,12 +143,14 @@ Format JSON:
 {"type":"interactive","kind":"match","difficulty":"normal","question":"Cocokkan ...","pairs":[{"a":"...","b":"..."}],"explanation":"...","sourceIndex":2},
 {"type":"interactive","kind":"order","difficulty":"hard","question":"Urutkan ...","items":["langkah 1","langkah 2","langkah 3","langkah 4"],"explanation":"...","sourceIndex":3}]}`);
 
-  const qs = (out.questions || []).map(q => validate(q, cat, headlines)).filter(Boolean);
+  const list = Array.isArray(out) ? out : out.questions || out.soal || out.items || [];
+  const qs = list.map(q => validate(q, cat, headlines)).filter(Boolean);
+  if (list.length && !qs.length) console.warn('[generate] semua soal ditolak validator', cat, JSON.stringify(list[0]).slice(0, 300));
   const db = await getDB();
   const saved = qs.length ? await db.addQuestions(qs) : 0;
   const mat = await materialFor(cat, headlines, today).catch(e => { console.error('materi', cat, e.message); return null; });
   if (mat) await db.addMaterials([mat]);
-  return { cat, saved, material: mat ? 1 : 0, headlines };
+  return { cat, saved, material: mat ? 1 : 0, headlines, reason: saved ? '' : list.length ? 'format soal dari AI tidak sesuai' : 'AI tidak mengirim soal' };
 }
 
 export default handle(['GET', 'POST'], async (req, res) => {
