@@ -1,6 +1,7 @@
 // Arena Duel: lobby (buat/gabung/daftar room aktif) + ruang duel real-time (polling)
 import { api, session } from './api.js';
 import { $, $$, esc, toast, sheet, confetti, vibrate, fmt, icons, avatar } from './ui.js';
+import { sfx } from './sound.js';
 import { CATEGORIES, DIFFS, catByKey, diffByKey } from './data.js';
 import { setDuelPresence, onlineWidget } from './presence.js';
 
@@ -245,7 +246,7 @@ function renderRoom(app, code) {
     $('#bigCode').onclick = share; $('#shareBtn').onclick = share;
     $('#startBtn')?.addEventListener('click', async () => {
       const b = $('#startBtn'); b.disabled = true; b.innerHTML = '<span class="spinner"></span>';
-      try { await api('/duel', { method: 'POST', body: { action: 'start', code } }); vibrate(20); } catch (e) { toast(e.message, 'err'); b.disabled = false; b.textContent = '⚔️ Mulai duel'; }
+      try { await api('/duel', { method: 'POST', body: { action: 'start', code } }); vibrate(20); sfx('duel'); } catch (e) { toast(e.message, 'err'); b.disabled = false; b.textContent = '⚔️ Mulai duel'; }
     });
   }
 
@@ -259,7 +260,7 @@ function renderRoom(app, code) {
     const tick = () => {
       const s = Math.max(0, Math.ceil((st.timing.startAt - now()) / 1000));
       const el = $('#cdNum'); if (!el) return;
-      if (s !== last) { el.textContent = s || '⚔️'; el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); if (s) vibrate(10); last = s; }
+      if (s !== last) { el.textContent = s || '⚔️'; el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); if (s) { vibrate(10); sfx('tick'); } else sfx('go'); last = s; }
       if (s > 0) raf = requestAnimationFrame(tick); else poll();
     };
     tick();
@@ -301,7 +302,7 @@ function renderRoom(app, code) {
         const k = +b.dataset.k; st.question.myChoice = k;
         $$('.opt', root).forEach(o => { o.disabled = true; o.classList.toggle('sel', +o.dataset.k === k); });
         $('#qStatus').innerHTML = '<div class="waiting-host"><span class="spinner"></span> Jawaban terkirim! Menunggu waktu habis…</div>';
-        vibrate(12);
+        vibrate(12); sfx('click');
         try { await api('/duel', { method: 'POST', body: { action: 'answer', code, index: q.index, choice: k } }); }
         catch (e) { toast(e.message, 'err'); }
       }));
@@ -321,7 +322,7 @@ function renderRoom(app, code) {
     $('#qStatus').innerHTML = `<div class="explain ${ok ? '' : 'bad'} fade-in"><b>${q.myChoice == null ? '⏰ Kamu tidak menjawab' : ok ? `✅ Benar! +${fmt(meP?.last?.pts || 0)} poin` : '❌ Kurang tepat'}</b>
       ${!ok ? ` Jawaban: <b>${L[q.answer]}. ${esc(q.options[q.answer])}</b>` : ''}
       ${q.explanation ? `<div class="muted" style="margin-top:6px">${esc(q.explanation)}</div>` : ''}</div>`;
-    if (ok) { confetti(40); vibrate(15); } else vibrate([40, 30, 40]);
+    if (ok) { confetti(40); vibrate(15); sfx('correct'); } else { vibrate([40, 30, 40]); sfx(q.myChoice == null ? 'tick' : 'wrong'); }
     $('#tBar').style.width = '0%';
     runTimer(st.timing.next, st.timing.reveal * 1000);
   }
@@ -346,6 +347,7 @@ function renderRoom(app, code) {
           <span style="color:var(--green)">Jawaban benar: ${L[r.answer]}. ${esc(r.options[r.answer])}</span>${r.explanation ? `<span class="muted">${esc(r.explanation)}</span>` : ''}</div></div>`).join('')}
       </div>`;
     bindCommon();
+    setTimeout(() => sfx(meP?.rank === 1 ? 'win' : 'lose'), 200);
     if (meP?.rank === 1) setTimeout(() => confetti(140), 300);
     saveResult(meP);
   }

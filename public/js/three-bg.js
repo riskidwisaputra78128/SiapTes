@@ -87,6 +87,7 @@ export async function initBackground(canvas) {
   const clock = new THREE.Clock();
   function loop() {
     if (!running) return;
+    if (window.__bgPause) { setTimeout(() => requestAnimationFrame(loop), 600); return; } // halaman 3D lain sedang aktif
     const t = clock.getElapsedTime();
     mx += (tx - mx) * 0.04; my += (ty - my) * 0.04;
     burst *= 0.94;

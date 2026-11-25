@@ -10,6 +10,7 @@ import { renderDuel } from './duel.js';
 import { renderAdminLive } from './admin-live.js';
 import { startPresence, onlineWidget, isHidden, setHidden, presence, refreshPresence } from './presence.js';
 import { applyTheme, currentTheme, openThemePicker, THEMES } from './theme.js';
+import { mountDock, setDockVisible } from './dock.js';
 
 const app = $('#app');
 const NAV = [
@@ -50,6 +51,7 @@ async function route() {
   if (session.loggedIn && path === 'login') { location.hash = '#/'; return; }
   window.scrollTo(0, 0);
   const inQuiz = path === 'quiz';
+  setDockVisible(path !== 'login' && !inQuiz);
   chrome(path !== 'login' && !inQuiz && (authed || path !== 'teknologi'), path);
   app.innerHTML = '';
   try {
@@ -316,8 +318,12 @@ async function renderHome() {
     const isDaily = d.daily.length > 0;
     el.innerHTML = list.map(m => {
       const c = catByKey[m.category] || {};
-      return `<a class="glass mat-mini" href="#/materi?id=${encodeURIComponent(m.id)}"><span class="glow" style="background:${c.color || '#818cf8'}"></span>
-        <span class="dim">${c.ico || '📘'} ${esc(c.name || '')}</span><b>${esc(m.title)}</b><span class="dim">⏱️ ${m.readMin} mnt${isDaily && m.day ? ' · ' + (m.day === new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10) ? '<span style="color:var(--cyan)">Hari ini</span>' : m.day) : ''}</span></a>`;
+      const fb = `/img/cat/${catByKey[m.category] ? m.category : 'isu'}.svg`;
+      const isToday = isDaily && m.day === new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10);
+      return `<a class="glass mat-mini has-img" href="#/materi?id=${encodeURIComponent(m.id)}">
+        <span class="mm-img"><img src="${esc(m.cover || fb)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='${fb}'">
+          <span class="mm-cat">${c.ico || '📘'} ${esc(c.name || '')}</span>${isToday ? '<span class="mm-new">BARU</span>' : ''}</span>
+        <span class="mm-body"><b>${esc(m.title)}</b>${m.highlight ? `<span class="mm-hl">✨ ${esc(m.highlight)}</span>` : ''}</span></a>`;
     }).join('') + (isDaily ? '' : '<div class="dim" style="align-self:center;padding:0 8px">Materi harian dari berita muncul setiap pagi 06.00 WIB</div>');
   }).catch(() => { const el = $('#matStrip'); if (el) el.innerHTML = ''; });
 
@@ -517,7 +523,10 @@ function renderProfile() {
       </div>
       <p class="dim" style="margin:8px 0 0">💡 Jalankan satu per satu, beri jeda ±1 menit agar kuota Gemini tidak cepat habis.</p>
       <pre id="genOut" class="dim" style="white-space:pre-wrap;margin:12px 0 0"></pre><div id="genLinks"></div>
-    </div>` : ''}
+    </div>
+    <div class="glass card"><div class="row between"><h2 class="h2">💬 Kritik & Saran</h2><span class="chip" id="fbUnread">…</span></div>
+      <p class="dim" style="margin:4px 0 10px">Pesan dari pengguna. Salinannya juga masuk ke Google Sheet, tab "Kritik &amp; Saran".</p>
+      <div id="fbList"><div class="skeleton" style="height:80px"></div></div></div>` : ''}
     <div class="glass card">
       <h2 class="h2">Tentang akun</h2>
       <p class="muted" style="margin:6px 0 0">Akun tersimpan aman di Google Sheet melalui Google Apps Script (kata sandi di-hash). Riwayat latihan tersimpan di Firebase.</p>
@@ -548,6 +557,18 @@ function renderProfile() {
         Terakhir generate${lg?.type && lg.type !== 'all' ? ' ' + lg.type : ''}: ${lg ? `${new Date(lg.at).toLocaleString('id-ID')} (${lg.total} soal, ${lg.materials || 0} materi)` : 'belum pernah'}`;
     }).catch(() => {});
     loadStatus();
+    const TY = { saran: '💡 Saran', kritik: '🗣️ Kritik', bug: '🐞 Bug', pujian: '💖 Pujian' };
+    const loadFb = () => api('/presence?op=feedback').then(d => {
+      $('#fbUnread').textContent = `${d.unread} baru`;
+      $('#fbList').innerHTML = d.items.length ? d.items.map(f => `
+        <div class="fb-item ${f.done ? 'done' : ''}"><div class="row between wrap" style="gap:6px"><span class="row" style="gap:6px"><span class="chip">${TY[f.type] || f.type}</span>${f.rating ? `<span class="fb-rt">${'★'.repeat(f.rating)}${'☆'.repeat(5 - f.rating)}</span>` : ''}</span>
+          <span class="dim">${esc(f.name)} · ${timeAgo(f.createdAt)}${f.page ? ' · ' + esc(f.page) : ''}</span></div>
+          <p>${esc(f.message)}</p>
+          <button class="btn ghost sm" data-fb="${esc(f.id)}" data-done="${f.done ? 0 : 1}">${f.done ? '↩️ Tandai belum dibaca' : '✓ Tandai sudah dibaca'}</button></div>`).join('')
+        : '<div class="empty">Belum ada pesan masuk.</div>';
+      $$('[data-fb]').forEach(b => (b.onclick = async () => { b.disabled = true; await api('/presence?op=feedback', { method: 'POST', body: { action: 'done', id: b.dataset.fb, done: b.dataset.done === '1' } }).catch(e => toast(e.message, 'err')); loadFb(); }));
+    }).catch(e => { $('#fbList').innerHTML = `<div class="empty">${esc(e.message)}</div>`; });
+    loadFb();
     const genBtns = $$('[data-gen]');
     genBtns.forEach(b => (b.onclick = async () => {
       const type = b.dataset.gen, label = b.innerHTML;
@@ -571,6 +592,7 @@ window.addEventListener('auth:expired', () => { toast('Sesi berakhir, silakan ma
 window.addEventListener('beforeunload', e => { if (practice.active) { e.preventDefault(); e.returnValue = ''; } });
 
 applyTheme(currentTheme(), { save: false });
+mountDock();
 if (session.loggedIn) { startPresence(); syncAvatar(); }
 window.addEventListener('hashchange', () => { if (session.loggedIn) startPresence(); });
 $('#themeBtn').onclick = openThemePicker;

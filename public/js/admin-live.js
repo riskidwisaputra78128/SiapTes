@@ -111,8 +111,11 @@ export async function renderAdminLive(app) {
   /* ───── Renderer, kamera, cahaya ───── */
   const stage = $('#ccStage'), canvas = $('#ccCanvas'), overlay = $('#ccOverlay');
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
-  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, SMALL ? 1.5 : 2));
-  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  // Mode ringan: resolusi dibatasi, bayangan sederhana & tidak dihitung tiap frame
+  let pr = Math.min(devicePixelRatio || 1, 1.25);
+  renderer.setPixelRatio(pr);
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap; renderer.shadowMap.autoUpdate = false;
+  window.__bgPause = true; // jeda background 3D beranda selama di kantor
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   const scene = new THREE.Scene();
   const cam = new THREE.PerspectiveCamera(32, 1, 0.5, 600);
@@ -124,15 +127,21 @@ export async function renderAdminLive(app) {
   controls.target.copy(OVER.target);
   { const o = overDir(); cam.position.copy(OVER.target).addScaledVector(o.dir, o.dist); }
 
-  scene.add(new THREE.HemisphereLight(S.sky, S.gnd, S.hemi));
+  scene.add(new THREE.HemisphereLight(S.sky, S.gnd, NIGHT ? S.hemi * 1.45 : S.hemi));
   const sun = new THREE.DirectionalLight(NIGHT ? 0x93a5ff : 0xfff4e0, S.sun);
-  sun.position.set(-22, 40, 26); sun.castShadow = true; sun.shadow.mapSize.set(SMALL ? 1024 : 2048, SMALL ? 1024 : 2048);
+  sun.position.set(-22, 40, 26); sun.castShadow = true; sun.shadow.mapSize.set(SMALL ? 512 : 1024, SMALL ? 512 : 1024);
   Object.assign(sun.shadow.camera, { left: -34, right: 34, top: 30, bottom: -30, far: 140 }); sun.shadow.bias = -0.0004;
   scene.add(sun);
 
   const M = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.75, metalness: 0.05, ...extra });
   const B = color => new THREE.MeshBasicMaterial({ color });
   const glassMat = (op = 0.22) => new THREE.MeshStandardMaterial({ color: 0xbfdbfe, transparent: true, opacity: op, roughness: 0.05, metalness: 0.2, depthWrite: false });
+  let poolTex = null;
+  const pool = (x, z, r, color, op, y = 0.04) => {
+    if (!poolTex) { const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d'); const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); poolTex = new THREE.CanvasTexture(c); }
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(r * 2, r * 2), new THREE.MeshBasicMaterial({ map: poolTex, color, transparent: true, opacity: op, depthWrite: false, blending: THREE.AdditiveBlending }));
+    m.rotation.x = -Math.PI / 2; m.position.set(x, y, z); m.renderOrder = 2; scene.add(m); return m;
+  };
   const box = (w, h, d, mat, x = 0, y = 0, z = 0, parent = scene, shadow = true) => {
     const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y + h / 2, z);
     m.castShadow = shadow; m.receiveShadow = true; parent.add(m); return m;
@@ -198,7 +207,7 @@ export async function renderAdminLive(app) {
   for (let x = -72; x <= 72; x += 12) {
     box(0.14, 3.6, 0.14, M(0x475569), x, 0.16, ROADZ - 4.8); box(0.9, 0.1, 0.12, M(0x475569), x + 0.4, 3.7, ROADZ - 4.8);
     box(0.4, 0.14, 0.26, NIGHT ? B(0xfff3c4) : M(0xe2e8f0), x + 0.75, 3.6, ROADZ - 4.8, scene, false);
-    if (NIGHT && !SMALL && Math.abs(x) <= 36) { const pl = new THREE.PointLight(0xffe2a8, 16, 10, 1.8); pl.position.set(x + 0.75, 3.4, ROADZ - 4.8); scene.add(pl); }
+    if (NIGHT && Math.abs(x) <= 36) pool(x + 0.75, ROADZ - 4.8, 2.6, 0xffe2a8, 0.35);
   }
   // gedung latar
   function windowTex(lit) {
@@ -548,7 +557,8 @@ export async function renderAdminLive(app) {
     r.guardPos = [3.4, 0.02, -4.1, Math.PI];
   }
   // lampu interior malam
-  if (NIGHT && !SMALL) ROOMS.forEach(r => { const pl = new THREE.PointLight(0xffd7a0, 22, Math.max(r.w, r.d) * 1.1, 1.5); pl.position.set(r.cx, 3.4, r.cz); scene.add(pl); });
+  // lampu ruangan palsu (genangan cahaya) – jauh lebih ringan daripada PointLight
+  if (NIGHT) ROOMS.forEach(r => pool(r.cx, r.cz, Math.max(r.w, r.d) * 0.55, 0xffd7a0, 0.22, FY + 0.03));
 
   /* ───── Bekukan objek statis (hemat CPU) ───── */
   { const dyn = new Set([...animated, ...cars.map(c => c.car), ...clouds]);
@@ -619,8 +629,9 @@ export async function renderAdminLive(app) {
     const a = new THREE.Object3D(); a.position.set(r.cx, FY + 3.1, r.z1 + 0.6); scene.add(a); labelAnch[r.key] = a;
   });
   const tagEls = new Map(); const v = new THREE.Vector3();
-  const toScreen = (obj, offY = 0) => { obj.getWorldPosition(v); v.y += offY; v.project(cam); return { x: (v.x * 0.5 + 0.5) * stage.clientWidth, y: (-v.y * 0.5 + 0.5) * stage.clientHeight, behind: v.z > 1 }; };
-  const place = (el, p, anchor = '-100%') => { el.style.transform = `translate(${p.x}px, ${p.y}px) translate(-50%, ${anchor})`; el.style.visibility = p.behind ? 'hidden' : ''; };
+  const toScreen = (obj, offY = 0) => { obj.getWorldPosition(v); v.y += offY; v.project(cam); return { x: (v.x * 0.5 + 0.5) * SW, y: (-v.y * 0.5 + 0.5) * SH, behind: v.z > 1 }; };
+  // tulis ke DOM hanya bila posisinya berubah (hindari reflow tiap frame)
+  const place = (el, p, anchor = '-100%') => { const tr = `translate(${Math.round(p.x)}px, ${Math.round(p.y)}px) translate(-50%, ${anchor})`; if (el._tr !== tr) { el.style.transform = tr; el._tr = tr; } const vis = p.behind ? 'hidden' : ''; if (el._vis !== vis) { el.style.visibility = vis; el._vis = vis; } };
   function drawOverlay() {
     ROOMS.forEach(r => { place(labelEls[r.key], toScreen(labelAnch[r.key]), '-50%'); place(guardEls[r.key], toScreen(guards[r.key], r.key === 'ai' ? 2.6 : 2.3)); });
     for (const [k, ch] of chars) {
@@ -737,15 +748,27 @@ export async function renderAdminLive(app) {
   $('#demoChk').onchange = () => load();
 
   /* ───── Animasi ───── */
-  const resize = () => { const w = stage.clientWidth, h = stage.clientHeight; cam.aspect = w / h; cam.updateProjectionMatrix(); renderer.setSize(w, h, false); };
+  let SW = 1, SH = 1;
+  const resize = () => { const w = stage.clientWidth, h = stage.clientHeight; SW = w; SH = h; cam.aspect = w / h; cam.updateProjectionMatrix(); renderer.setSize(w, h, false); };
   new ResizeObserver(resize).observe(stage); resize();
   const clock = new THREE.Clock();
   const swing = (ud, amt, speed, t) => { const s = Math.sin(t * speed + ud.phase) * amt; ud.legL.rotation.x = s; ud.legR.rotation.x = -s; ud.armL.rotation.x = -s; ud.armR.rotation.x = s; };
   const ease = (o, k, v) => (o.rotation.x += (v - o.rotation.x) * k);
 
+  let onScreen = true, slow = 0, frames = 0, shadowT = 0;
+  new IntersectionObserver(es => (onScreen = es[0].isIntersecting)).observe(stage);
   function frame() {
-    if (!document.body.contains(stage)) { renderer.dispose(); return; }
-    const dt = Math.min(clock.getDelta(), 0.1), t = clock.elapsedTime, busy = state.system.generating;
+    if (!document.body.contains(stage)) { renderer.dispose(); window.__bgPause = false; return; }
+    if (!onScreen || document.hidden) { clock.getDelta(); setTimeout(() => requestAnimationFrame(frame), 250); return; }
+    const raw = clock.getDelta(), dt = Math.min(raw, 0.1), t = clock.elapsedTime, busy = state.system.generating;
+    // kualitas adaptif: bila FPS < ~40, turunkan resolusi lalu matikan bayangan
+    if (++frames > 30) { slow = slow * 0.9 + (raw > 0.026 ? 1 : 0) * 0.1; if (frames > 90 && slow > 0.6) {
+      frames = 31; slow = 0;
+      if (pr > 1) { pr = 1; renderer.setPixelRatio(pr); resize(); }
+      else if (pr > 0.8) { pr = 0.8; renderer.setPixelRatio(pr); resize(); }
+      else if (sun.castShadow) { sun.castShadow = false; }
+    } }
+    shadowT -= dt; if (shadowT <= 0 && sun.castShadow) { renderer.shadowMap.needsUpdate = true; shadowT = 0.35; }
     if (fly) {
       const k = Math.min(1, dt * 3.2);
       controls.target.lerp(fly.target, k); cam.position.lerp(fly.pos, k);

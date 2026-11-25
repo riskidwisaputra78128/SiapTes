@@ -1,5 +1,6 @@
 import { api, session } from './api.js';
 import { $, $$, esc, toast, timeAgo, confetti, countUp } from './ui.js';
+import { sfx } from './sound.js';
 import { catByKey } from './data.js';
 
 const READ_KEY = 'sl_read';
@@ -217,11 +218,12 @@ async function renderDetail(app, id) {
       if (box.dataset.done) return; box.dataset.done = '1'; answered++;
       const j = +o.dataset.j, ok = j === q.answer;
       if (ok) score++;
+      sfx(ok ? 'correct' : 'wrong');
       $$('.mq-opt', box).forEach((x, k) => { x.disabled = true; if (k === q.answer) x.classList.add('ok'); else if (x === o) x.classList.add('no'); });
       const w = $('.mq-why', box); w.hidden = false; w.className = 'mq-why ' + (ok ? 'ok' : 'no');
       w.textContent = (ok ? '✅ Benar! ' : '❌ Kurang tepat. ') + (q.why || '');
       $('#mqScore').textContent = `${score}/${quiz.length}`;
-      if (answered === quiz.length) { if (score === quiz.length) { confetti(70); toast('Sempurna! Kamu paham materi ini 🎉', 'ok'); } else toast(`Skor ${score}/${quiz.length}. Baca ulang bagian yang salah ya 💪`); }
+      if (answered === quiz.length) { if (score === quiz.length) { confetti(70); setTimeout(() => sfx('win'), 300); toast('Sempurna! Kamu paham materi ini 🎉', 'ok'); } else toast(`Skor ${score}/${quiz.length}. Baca ulang bagian yang salah ya 💪`); }
     }));
   });
   // progres baca

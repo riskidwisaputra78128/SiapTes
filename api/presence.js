@@ -3,6 +3,7 @@
 // GET  /api/presence                           → daftar yang online (tamu hanya mendapat jumlah)
 import { handle, readBody, send, query } from './_lib/http.js';
 import { avatarRoute } from './_lib/avatar-route.js';
+import { feedbackRoute } from './_lib/feedback-route.js';
 import { getUser, requireUser } from './_lib/auth.js';
 import { getDB } from './_lib/db.js';
 import { avatarMap, avatarUrl } from './_lib/avatar.js';
@@ -49,5 +50,6 @@ const presenceRoute = handle(['GET', 'POST'], async (req, res) => {
 // Foto profil ikut di endpoint ini agar total function tetap 12 (batas paket Hobby)
 export default function (req, res) {
   const q = query(req);
+  if (q.get('op') === 'feedback') return feedbackRoute(req, res);
   return q.get('avatar') || q.get('op') === 'avatar' ? avatarRoute(req, res) : presenceRoute(req, res);
 }

@@ -14,6 +14,7 @@
 
 var SHEET_USERS = 'Users';
 var SHEET_LOG = 'LoginLog';
+var SHEET_FEEDBACK = 'Kritik & Saran';
 var HEADERS = ['uid', 'name', 'email', 'salt', 'hash', 'target', 'createdAt', 'lastLogin', 'loginCount', 'status'];
 var ITER = 300;
 
@@ -56,6 +57,7 @@ function doPost(e) {
       case 'forgot': return json(forgot(req));
       case 'reset': return json(resetPassword(req));
       case 'ping': return json({ ok: true });
+      case 'feedback': return json(feedback(req));
       default: return json({ ok: false, error: 'Aksi tidak dikenal' });
     }
   } catch (err) {
@@ -63,6 +65,21 @@ function doPost(e) {
   } finally {
     lock.releaseLock();
   }
+}
+
+// Kritik & saran dari website → tab "Kritik & Saran"
+function feedback(req) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(SHEET_FEEDBACK);
+  if (!sh) {
+    sh = ss.insertSheet(SHEET_FEEDBACK);
+    sh.appendRow(['Waktu', 'Nama', 'Email', 'Jenis', 'Rating', 'Pesan', 'Halaman', 'Status']);
+    sh.getRange(1, 1, 1, 8).setFontWeight('bold').setBackground('#1e3a8a').setFontColor('#ffffff');
+    sh.setFrozenRows(1); sh.setColumnWidth(6, 420);
+  }
+  sh.appendRow([new Date(), String(req.name || '').substring(0, 60), String(req.email || '').substring(0, 80), String(req.type || ''),
+    Number(req.rating) || '', String(req.message || '').substring(0, 1500), String(req.page || '').substring(0, 40), 'Baru']);
+  return { ok: true };
 }
 
 function register(req) {

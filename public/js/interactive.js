@@ -1,5 +1,6 @@
 // Mode 4: Interaktif Visual — susun urutan, susun kalimat, pencocokan, kelompokkan, susun grafik
 import { $, $$, esc, toast, confetti, vibrate, icons, fmt } from './ui.js';
+import { sfx } from './sound.js';
 import { diffByKey } from './data.js';
 
 const KIND = {
@@ -66,7 +67,7 @@ export function runInteractive(app, practice, { complete, metaHTML, srcHTML, con
       const ok = res.ratio >= 0.999;
       st.results[st.i] = { q, ok, ratio: res.ratio };
       $('#checkBtn').remove(); $('#resetBtn').remove();
-      vibrate(ok ? 15 : [50, 30, 50]);
+      vibrate(ok ? 15 : [50, 30, 50]); sfx(ok ? 'correct' : 'wrong');
       if (ok) { confetti(60); window.dispatchEvent(new Event('bg:burst')); }
       const last = st.i === n - 1;
       $('#fb').innerHTML = `

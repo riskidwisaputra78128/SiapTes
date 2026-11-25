@@ -1,5 +1,6 @@
 import { api, session, getInfo } from './api.js';
 import { $, $$, esc, toast, ring, animateRings, confetti, vibrate, sheet, icons, mmss, fmt, countUp } from './ui.js';
+import { sfx } from './sound.js';
 import { CATEGORIES, MODES, DIFFS, catByKey, modeByKey, diffByKey } from './data.js';
 import { runInteractive } from './interactive.js';
 
@@ -163,7 +164,7 @@ function runPG(app) {
         <button class="icon-btn" id="flagBtn" aria-label="Tandai ragu" style="${st.flag.has(st.i) ? 'color:var(--amber);border-color:var(--amber)' : ''}">${icons.flag}</button>
         ${st.i === n - 1 ? '<button class="btn" id="doneBtn">Selesai ✓</button>' : '<button class="btn" id="nextBtn">Berikutnya →</button>'}
       </div>`;
-    $$('.opt', app).forEach(b => (b.onclick = () => { st.ans[st.i] = +b.dataset.k; vibrate(10); draw(); }));
+    $$('.opt', app).forEach(b => (b.onclick = () => { st.ans[st.i] = +b.dataset.k; vibrate(10); sfx('click'); draw(); }));
     $('#prevBtn').onclick = () => { st.i--; draw(); };
     $('#nextBtn') && ($('#nextBtn').onclick = () => { st.i++; draw(); });
     $('#doneBtn') && ($('#doneBtn').onclick = askFinish);
@@ -296,10 +297,10 @@ function runGame(app) {
       const r = ev?.currentTarget?.getBoundingClientRect?.() || $(`.tile[data-k="${q.answer}"]`).getBoundingClientRect();
       floatPts(`+${gained}`, r.left + r.width / 2, r.top);
       if (st.combo >= 3) confetti(40, { x: r.left + r.width / 2, y: r.top });
-      flash('rgba(52,211,153,.5)'); vibrate(15);
+      flash('rgba(52,211,153,.5)'); vibrate(15); sfx('correct');
       window.dispatchEvent(new Event('bg:burst'));
     } else {
-      st.combo = 0; st.lives--; flash('rgba(251,113,133,.55)'); vibrate([60, 40, 60]);
+      st.combo = 0; st.lives--; flash('rgba(251,113,133,.55)'); vibrate([60, 40, 60]); sfx('wrong');
     }
     st.review.push({ q, chosen: k < 0 ? null : k, ok });
     hud();
@@ -391,6 +392,7 @@ function runEssay(app) {
       $('#essay').readOnly = true;
       btn.remove();
       showGrade(g, q);
+      sfx(g.score >= 60 ? 'correct' : 'wrong');
       if (g.score >= 75) confetti(70);
     } catch (e) {
       toast(e.message, 'err'); btn.disabled = false; btn.textContent = '🔍 Periksa Jawaban';
@@ -488,6 +490,7 @@ export function renderResult(app) {
   animateRings(app);
   countUp($('#scoreNum'), r.score, 1100);
   countUp($('#ptsNum'), r.points, 1100);
+  setTimeout(() => sfx(r.score >= 60 ? 'win' : 'lose'), 250);
   if (r.score >= 75) setTimeout(() => confetti(120), 400);
 }
 
