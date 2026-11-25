@@ -53,6 +53,8 @@ function doPost(e) {
     switch (req.action) {
       case 'register': return json(register(req));
       case 'login': return json(login(req));
+      case 'forgot': return json(forgot(req));
+      case 'reset': return json(resetPassword(req));
       case 'ping': return json({ ok: true });
       default: return json({ ok: false, error: 'Aksi tidak dikenal' });
     }
@@ -102,6 +104,94 @@ function login(req) {
   sh.getRange(row, 8, 1, 2).setValues([[new Date(), Number(v[8] || 0) + 1]]);
   log(email, 'login', 'ok');
   return { ok: true, user: { uid: v[0], name: v[1], email: v[2], target: v[5] } };
+}
+
+/* ───────── Lupa kata sandi (kode 6 digit via email, berlaku 15 menit) ───────── */
+function forgot(req) {
+  var email = String(req.email || '').trim().toLowerCase();
+  if (!email) return { ok: false, error: 'Email wajib diisi' };
+  var cache = CacheService.getScriptCache();
+  var rk = 'fg_' + email;
+  var n = Number(cache.get(rk) || 0);
+  if (n >= 3) return { ok: false, error: 'Terlalu sering meminta kode. Coba lagi 15 menit lagi.' };
+  cache.put(rk, String(n + 1), 900);
+
+  var sh = sheet();
+  var row = findRow(sh, email);
+  // Selalu jawab "ok" agar orang lain tidak bisa mengecek email mana yang terdaftar
+  if (row < 0) { log(email, 'forgot', 'notfound'); return { ok: true }; }
+
+  var code = String(100000 + Math.floor(Math.random() * 900000));
+  cache.put('rc_' + email, hash(code, email), 900);
+  cache.remove('rt_' + email);
+  var name = sh.getRange(row, 2).getValue();
+  MailApp.sendEmail({
+    to: email,
+    name: 'SiapLolos',
+    subject: 'Kode reset kata sandi SiapLolos: ' + code,
+    htmlBody:
+      '<div style="font-family:Arial,sans-serif;max-width:480px;margin:auto;padding:24px;border:1px solid #e5e7eb;border-radius:12px">' +
+      '<h2 style="margin:0 0 8px">Halo, ' + name + '</h2>' +
+      '<p>Kami menerima permintaan reset kata sandi akun SiapLolos kamu. Masukkan kode berikut di website:</p>' +
+      '<div style="font-size:32px;font-weight:bold;letter-spacing:8px;text-align:center;background:#eef2ff;padding:16px;border-radius:10px">' + code + '</div>' +
+      '<p style="color:#6b7280;font-size:13px">Kode berlaku 15 menit. Jika kamu tidak meminta reset, abaikan email ini — kata sandimu tetap aman.</p></div>',
+  });
+  log(email, 'forgot', 'sent');
+  return { ok: true };
+}
+
+function resetPassword(req) {
+  var email = String(req.email || '').trim().toLowerCase();
+  var code = String(req.code || '').trim();
+  var password = String(req.password || '');
+  if (password.length < 6) return { ok: false, error: 'Kata sandi baru minimal 6 karakter' };
+  var cache = CacheService.getScriptCache();
+  var tries = Number(cache.get('rt_' + email) || 0);
+  var stored = cache.get('rc_' + email);
+  if (!stored) return { ok: false, error: 'Kode sudah kedaluwarsa atau belum diminta. Minta kode baru.' };
+  if (tries >= 5) { cache.remove('rc_' + email); return { ok: false, error: 'Terlalu banyak percobaan. Minta kode baru.' }; }
+  if (hash(code, email) !== stored) {
+    cache.put('rt_' + email, String(tries + 1), 900);
+    log(email, 'reset', 'wrongcode');
+    return { ok: false, error: 'Kode salah. Sisa percobaan: ' + (4 - tries) };
+  }
+  var sh = sheet();
+  var row = findRow(sh, email);
+  if (row < 0) return { ok: false, error: 'Akun tidak ditemukan' };
+  var salt = Utilities.getUuid().replace(/-/g, '');
+  sh.getRange(row, 4, 1, 2).setValues([[salt, hash(password, salt)]]);
+  ['rc_', 'rt_', 'fail_'].forEach(function (p) { cache.remove(p + email); });
+  log(email, 'reset', 'ok');
+  var v = sh.getRange(row, 1, 1, HEADERS.length).getValues()[0];
+  return { ok: true, user: { uid: v[0], name: v[1], email: v[2], target: v[5] } };
+}
+
+/* ───────── Menu admin di Google Sheet ───────── */
+function onOpen() {
+  SpreadsheetApp.getUi().createMenu('SiapLolos')
+    .addItem('Reset kata sandi user (baris terpilih)', 'adminResetSelected')
+    .addItem('Setup sheet', 'setup')
+    .addToUi();
+}
+
+function adminResetSelected() {
+  var ui = SpreadsheetApp.getUi();
+  var sh = SpreadsheetApp.getActiveSheet();
+  if (sh.getName() !== SHEET_USERS) return ui.alert('Buka sheet "Users" lalu klik salah satu baris user.');
+  var row = sh.getActiveRange().getRow();
+  if (row < 2) return ui.alert('Pilih baris user (bukan baris judul).');
+  var v = sh.getRange(row, 1, 1, HEADERS.length).getValues()[0];
+  var ok = ui.alert('Reset kata sandi', 'Buat kata sandi sementara untuk ' + v[1] + ' (' + v[2] + ') dan kirim ke email-nya?', ui.ButtonSet.YES_NO);
+  if (ok !== ui.Button.YES) return;
+  var temp = Utilities.getUuid().replace(/-/g, '').substring(0, 8);
+  var salt = Utilities.getUuid().replace(/-/g, '');
+  sh.getRange(row, 4, 1, 2).setValues([[salt, hash(temp, salt)]]);
+  try {
+    MailApp.sendEmail({ to: v[2], name: 'SiapLolos', subject: 'Kata sandi sementara SiapLolos',
+      htmlBody: '<p>Halo ' + v[1] + ',</p><p>Admin telah mereset kata sandimu. Kata sandi sementara: <b style="font-size:20px">' + temp + '</b></p><p>Segera masuk lalu gunakan fitur "Lupa kata sandi" untuk menggantinya.</p>' });
+  } catch (e) {}
+  log(v[2], 'adminReset', 'ok');
+  ui.alert('Berhasil. Kata sandi sementara: ' + temp + '\n(Sudah dikirim ke email user)');
 }
 
 function sheet() {

@@ -75,7 +75,8 @@ function renderAuth() {
       <form id="authForm" novalidate>
         <div class="field reg" hidden><label for="fName">Nama lengkap</label><input id="fName" class="input" autocomplete="name" placeholder="Nama kamu"></div>
         <div class="field"><label for="fEmail">Email</label><input id="fEmail" class="input" type="email" autocomplete="email" inputmode="email" placeholder="nama@email.com" required></div>
-        <div class="field"><label for="fPass">Kata sandi</label><input id="fPass" class="input" type="password" autocomplete="current-password" placeholder="Minimal 6 karakter" required></div>
+        <div class="field"><div class="row between"><label for="fPass">Kata sandi</label><button type="button" class="link-btn dim log" id="forgotBtn" style="font-size:13px">Lupa kata sandi?</button></div>
+          ${pwInput('fPass', 'Minimal 6 karakter', 'current-password')}</div>
         <div class="field reg" hidden><label for="fTarget">Target tes</label>
           <select id="fTarget" class="input">${TARGETS.map(t => `<option>${t}</option>`).join('')}</select></div>
         <button class="btn block" id="authBtn" type="submit">Masuk</button>
@@ -87,11 +88,14 @@ function renderAuth() {
     mode = m;
     $$('.tabs button', app).forEach(b => b.classList.toggle('on', b.dataset.m === m));
     $$('.reg', app).forEach(el => (el.hidden = m !== 'register'));
+    $$('.log', app).forEach(el => (el.hidden = m !== 'login'));
     $('#authBtn').textContent = m === 'login' ? 'Masuk' : 'Buat Akun';
     $('#fPass').autocomplete = m === 'login' ? 'current-password' : 'new-password';
   };
   $$('.tabs button', app).forEach(b => (b.onclick = () => setMode(b.dataset.m)));
   $('#guestBtn').onclick = () => { session.setGuest(); location.hash = '#/'; };
+  $('#forgotBtn').onclick = () => renderForgot($('.auth-card'), $('#fEmail').value);
+  bindPwToggles(app);
   $('#authForm').onsubmit = async e => {
     e.preventDefault();
     const btn = $('#authBtn'); btn.disabled = true; const label = btn.textContent; btn.innerHTML = '<span class="spinner"></span>';
@@ -108,6 +112,81 @@ function renderAuth() {
       toast(err.message, 'err');
     } finally { btn.disabled = false; btn.textContent = label; }
   };
+}
+
+/* ───────── Input kata sandi dengan tombol lihat/sembunyikan ───────── */
+function pwInput(id, placeholder, ac) {
+  return `<div class="pw-wrap"><input id="${id}" class="input" type="password" autocomplete="${ac}" placeholder="${placeholder}" required>
+    <button type="button" class="pw-eye" data-for="${id}" aria-label="Tampilkan kata sandi">👁️</button></div>`;
+}
+function bindPwToggles(root) {
+  $$('.pw-eye', root).forEach(b => (b.onclick = () => {
+    const inp = $('#' + b.dataset.for); const show = inp.type === 'password';
+    inp.type = show ? 'text' : 'password';
+    b.textContent = show ? '🙈' : '👁️';
+    b.setAttribute('aria-label', show ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi');
+  }));
+}
+
+/* ───────── Lupa kata sandi ───────── */
+function renderForgot(card, prefill = '') {
+  let email = prefill;
+  const back = () => renderAuth();
+  const step1 = () => {
+    card.innerHTML = `
+      <button class="link-btn" id="backBtn" style="font-size:13px">← Kembali ke Masuk</button>
+      <h2 class="h2" style="margin-top:12px">Lupa kata sandi?</h2>
+      <p class="muted" style="margin:6px 0 0">Masukkan email akunmu. Kami akan mengirim kode 6 digit untuk membuat kata sandi baru.</p>
+      <form id="fgForm" novalidate>
+        <div class="field"><label for="fgEmail">Email</label><input id="fgEmail" class="input" type="email" inputmode="email" autocomplete="email" value="${esc(email)}" placeholder="nama@email.com"></div>
+        <button class="btn block" id="fgBtn" type="submit">Kirim kode</button>
+      </form>`;
+    $('#backBtn').onclick = back;
+    $('#fgForm').onsubmit = async e => {
+      e.preventDefault();
+      email = $('#fgEmail').value.trim();
+      const btn = $('#fgBtn'); btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+      try {
+        const r = await api('/auth', { method: 'POST', body: { action: 'forgot', email } });
+        toast(r.message, 'ok');
+        step2(r.devCode);
+      } catch (err) { toast(err.message, 'err'); btn.disabled = false; btn.textContent = 'Kirim kode'; }
+    };
+  };
+  const step2 = devCode => {
+    card.innerHTML = `
+      <button class="link-btn" id="backBtn" style="font-size:13px">← Kembali ke Masuk</button>
+      <h2 class="h2" style="margin-top:12px">Buat kata sandi baru</h2>
+      <p class="muted" style="margin:6px 0 0">Kode dikirim ke <b style="color:var(--text)">${esc(email)}</b>. Berlaku 15 menit — cek juga folder Spam.</p>
+      ${devCode ? `<p class="dim">Mode dev: kode = <b>${devCode}</b></p>` : ''}
+      <form id="rsForm" novalidate>
+        <div class="field"><label for="rsCode">Kode 6 digit</label>
+          <input id="rsCode" class="input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••" style="letter-spacing:10px;font-family:var(--num);font-size:22px;text-align:center"></div>
+        <div class="field"><label for="rsPass">Kata sandi baru</label>${pwInput('rsPass', 'Minimal 6 karakter', 'new-password')}</div>
+        <div class="field"><label for="rsPass2">Ulangi kata sandi baru</label>${pwInput('rsPass2', 'Ketik ulang', 'new-password')}</div>
+        <button class="btn block" id="rsBtn" type="submit">Simpan & Masuk</button>
+        <p class="dim" style="text-align:center;margin:0">Tidak menerima kode? <button type="button" class="link-btn" id="resendBtn">Kirim ulang</button></p>
+      </form>`;
+    bindPwToggles(card);
+    $('#backBtn').onclick = back;
+    $('#resendBtn').onclick = step1;
+    $('#rsCode').oninput = e => (e.target.value = e.target.value.replace(/\D/g, ''));
+    $('#rsForm').onsubmit = async e => {
+      e.preventDefault();
+      const code = $('#rsCode').value, p1 = $('#rsPass').value, p2 = $('#rsPass2').value;
+      if (code.length !== 6) return toast('Kode harus 6 digit', 'err');
+      if (p1.length < 6) return toast('Kata sandi minimal 6 karakter', 'err');
+      if (p1 !== p2) return toast('Kedua kata sandi tidak sama', 'err');
+      const btn = $('#rsBtn'); btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+      try {
+        const data = await api('/auth', { method: 'POST', body: { action: 'reset', email, code, password: p1 } });
+        session.set(data.token, data.user);
+        toast('Kata sandi berhasil diganti. Selamat datang kembali!', 'ok');
+        location.hash = '#/';
+      } catch (err) { toast(err.message, 'err'); btn.disabled = false; btn.textContent = 'Simpan & Masuk'; }
+    };
+  };
+  step1();
 }
 
 /* ───────── Beranda ───────── */
