@@ -399,11 +399,12 @@ function renderProfile() {
     $$('#profStats .v').forEach((el, i) => (el.textContent = i === 1 ? v[i] + '%' : fmt(v[i])));
   }).catch(() => {});
   if (u.admin) {
-    getInfo().then(d => {
+    const loadStatus = () => api('/news?fresh=' + Date.now()).then(d => {
       const st = d.status; const lg = st.lastGenerate;
       $('#sysStatus').innerHTML = `Firebase: <b>${st.firebase ? '✅ aktif' : '⚠️ memori'}</b> · AI: <b>${st.ai ? '✅ aktif' : '⚠️ belum diatur'}</b> · Soal hasil generate: <b>${fmt(st.generatedQuestions)}</b><br>
-        Terakhir generate: ${lg ? `${new Date(lg.at).toLocaleString('id-ID')} (${lg.total} soal)` : 'belum pernah'}`;
+        Terakhir generate: ${lg ? `${new Date(lg.at).toLocaleString('id-ID')} (${lg.total} soal, ${lg.materials || 0} materi)` : 'belum pernah'}`;
     }).catch(() => {});
+    loadStatus();
     $('#genBtn').onclick = async () => {
       const b = $('#genBtn'); b.disabled = true; b.innerHTML = '<span class="spinner"></span> Membuat soal…';
       try {
@@ -412,7 +413,7 @@ function renderProfile() {
         if (r.message) { toast(r.message, 'err'); $('#genOut').textContent = '⚠️ ' + r.message + '\n\n' + $('#genOut').textContent; }
         else toast(`${r.total} soal & ${r.materials || 0} materi baru ditambahkan`, 'ok');
       } catch (e) { toast(e.message, 'err'); }
-      b.disabled = false; b.textContent = '✨ Generate soal sekarang';
+      b.disabled = false; b.textContent = '✨ Generate soal sekarang'; loadStatus();
     };
   }
 }

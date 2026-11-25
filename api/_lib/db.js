@@ -29,7 +29,10 @@ async function init() {
   }
   if (sa.private_key) sa.private_key = sa.private_key.replace(/\\n/g, '\n');
   const app = getApps()[0] || initializeApp({ credential: cert(sa) });
-  return firestoreBackend(getFirestore(app));
+  const fs = getFirestore(app);
+  // Firestore menolak nilai `undefined` — abaikan saja field yang kosong
+  try { fs.settings({ ignoreUndefinedProperties: true }); } catch {}
+  return firestoreBackend(fs);
 }
 
 function firestoreBackend(fs) {

@@ -164,14 +164,14 @@ export default handle(['GET', 'POST'], async (req, res) => {
   try { results = await Promise.allSettled(cats.map(generateFor)); }
   finally { await dbg.setMeta('genStatus', { running: false, at: Date.now(), by }).catch(() => {}); }
   const summary = results.map((r, i) => r.status === 'fulfilled'
-    ? { cat: r.value.cat, saved: r.value.saved, material: r.value.material || 0, reason: r.value.reason }
+    ? { cat: r.value.cat, saved: r.value.saved, material: r.value.material || 0, reason: r.value.reason || '' }
     : { cat: cats[i], saved: 0, reason: r.reason?.quota ? 'kuota Gemini habis' : String(r.reason?.message || r.reason).slice(0, 120) });
 
   const headlines = results.flatMap(r => (r.status === 'fulfilled' ? r.value.headlines.slice(0, 3).map(h => ({ ...h, cat: r.value.cat })) : []));
   const db = await getDB();
   const log = { at: Date.now(), by, summary, total: summary.reduce((s, x) => s + x.saved, 0), materials: summary.reduce((s, x) => s + (x.material || 0), 0) };
-  await db.setMeta('lastGenerate', log);
-  if (headlines.length) await db.setMeta('news', { at: Date.now(), items: headlines });
+  await db.setMeta('lastGenerate', JSON.parse(JSON.stringify(log))).catch(e => console.error('log generate', e.message));
+  if (headlines.length) await db.setMeta('news', JSON.parse(JSON.stringify({ at: Date.now(), items: headlines }))).catch(() => {});
   const quota = results.some(r => r.status === 'rejected' && r.reason?.quota);
   const busy = results.some(r => r.status === 'rejected' && /sibuk/.test(r.reason?.message || ''));
   if (log.total === 0 && busy && !quota) log.message = 'Server Gemini sedang sibuk (banyak pengguna di seluruh dunia). Soal yang sudah ada tetap bisa dipakai. Coba lagi beberapa menit lagi.';
