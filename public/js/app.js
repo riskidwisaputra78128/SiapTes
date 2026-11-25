@@ -554,6 +554,7 @@ function renderProfile() {
     const loadStatus = () => api('/news?fresh=' + Date.now()).then(d => {
       const st = d.status; const lg = st.lastGenerate;
       $('#sysStatus').innerHTML = `Firebase: <b>${st.firebase ? '✅ aktif' : '⚠️ memori'}</b> · AI: <b>${st.ai ? '✅ aktif' : '⚠️ belum diatur'}</b> · Soal hasil generate: <b>${fmt(st.generatedQuestions)}</b><br>
+        ${st.models?.length ? `Model AI (bergiliran): ${st.models.map(m => `<b>${esc(m.id)}</b>${m.restUntil ? ` <span style="color:var(--amber)">⏸ istirahat s/d ${new Date(m.restUntil).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</span>` : ' ✅'}`).join(' · ')}<br>` : ''}
         Terakhir generate${lg?.type && lg.type !== 'all' ? ' ' + lg.type : ''}: ${lg ? `${new Date(lg.at).toLocaleString('id-ID')} (${lg.total} soal, ${lg.materials || 0} materi)` : 'belum pernah'}`;
     }).catch(() => {});
     loadStatus();

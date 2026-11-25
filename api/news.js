@@ -1,7 +1,7 @@
 // GET /api/news — berita terkini + jumlah bank soal (publik) + status sistem
 import { handle, send, startOfDayWIB } from './_lib/http.js';
 import { getDB, firebaseEnabled } from './_lib/db.js';
-import { aiEnabled } from './_lib/ai.js';
+import { aiEnabled, aiModelsInfo } from './_lib/ai.js';
 import { fetchHeadlines, backupAll, CAT_KEYWORDS } from './_lib/news.js';
 import { imageForNews } from './_lib/ogimage.js';
 import { SEED_QUESTIONS } from './_lib/seed.js';
@@ -56,11 +56,12 @@ export default handle(['GET'], async (req, res) => {
     if (items.length) { news = { at: Date.now(), items }; db.setMeta('news3', news).catch(() => {}); }
   }
   const [last, bank] = await Promise.all([db.getMeta('lastGenerate').catch(() => null), questionBank(db)]);
+  const models = new URL(req.url, 'http://x').searchParams.get('fresh') && aiEnabled() ? await aiModelsInfo().catch(() => null) : undefined;
   res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=60');
   send(res, 200, {
     items: (news?.items || []).slice(0, 10),
     updatedAt: news?.at || null,
     bank,
-    status: { firebase: firebaseEnabled(), ai: aiEnabled(), generatedQuestions: bank.generated, lastGenerate: last },
+    status: { firebase: firebaseEnabled(), ai: aiEnabled(), generatedQuestions: bank.generated, lastGenerate: last, models },
   });
 });
