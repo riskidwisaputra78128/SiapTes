@@ -768,3 +768,6 @@ button.dp { cursor: pointer; }
 .office-card { background: linear-gradient(135deg, color-mix(in srgb, var(--cyan) 14%, var(--glass)), var(--glass)); }
 .cc-stage:fullscreen .cc-hint, .cc-stage.cc-full .cc-hint, .cc-stage:-webkit-full-screen .cc-hint { display: none; }
 .cc-stage:fullscreen .cc-fs-stats, .cc-stage.cc-full .cc-fs-stats { bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
+
+.arsip-meter { width: 160px; height: 8px; border-radius: 99px; background: var(--w8); overflow: hidden; }
+.arsip-meter i { display: block; height: 100%; background: var(--grad); border-radius: inherit; }

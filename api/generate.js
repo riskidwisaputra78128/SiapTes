@@ -19,6 +19,7 @@ const CAT_LABEL = {
   twk: 'wawasan kebangsaan, konstitusi, lembaga negara & hukum',
 };
 const DIFFS = ['easy', 'normal', 'hard', 'prof'];
+export const MAX_MATERIALS = 50; // arsip materi harian: maksimal 50, yang terlama dihapus otomatis
 
 function authorize(req) {
   const h = req.headers['authorization'] || '';
@@ -149,7 +150,7 @@ Format JSON:
   const db = await getDB();
   const saved = qs.length ? await db.addQuestions(qs) : 0;
   const mat = await materialFor(cat, headlines, today).catch(e => { console.error('materi', cat, e.message); return null; });
-  if (mat) await db.addMaterials([mat]);
+  if (mat) { await db.addMaterials([mat]); await db.pruneMaterials(MAX_MATERIALS).catch(e => console.error('prune', e.message)); }
   return { cat, saved, material: mat ? 1 : 0, headlines, reason: saved ? '' : list.length ? 'format soal dari AI tidak sesuai' : 'AI tidak mengirim soal' };
 }
 

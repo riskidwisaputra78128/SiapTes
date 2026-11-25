@@ -42,39 +42,56 @@ function card(m, read) {
 export async function renderMateri(app, params) {
   const id = params.get('id');
   if (id) return renderDetail(app, id);
-  let tab = params.get('tab') === 'inti' ? 'inti' : 'harian';
+  let tab = ['hari', 'arsip', 'inti'].includes(params.get('tab')) ? params.get('tab') : 'hari';
+  let filter = 'all';
   app.innerHTML = `
   <section class="stack fade-in">
     <div class="row between wrap">
-      <div><h1 class="h1">📖 Materi belajar</h1><p class="muted" style="margin:0">Rangkuman berita terbaru setiap pagi + materi inti setiap tes.</p></div>
-      <div class="row" style="gap:8px"><div class="tabs" id="matTabs"><button data-t="harian">🗞️ Update Harian</button><button data-t="inti">📚 Materi Inti</button></div>
+      <div><h1 class="h1">📖 Materi belajar</h1><p class="muted" style="margin:0">Rangkuman berita terbaru setiap pagi, tersimpan di arsip + materi inti setiap tes.</p></div>
+      <div class="row" style="gap:8px"><div class="tabs" id="matTabs"><button data-t="hari">🗞️ Hari Ini</button><button data-t="arsip">📚 Semua Berita</button><button data-t="inti">📘 Inti</button></div>
       <button class="icon-btn" id="matRefresh" title="Muat ulang" aria-label="Muat ulang">🔄</button></div>
     </div>
     <div id="matBody"><div class="skeleton" style="height:240px"></div></div>
   </section>`;
   const data = await getMaterials(params.get('r') === '1');
   const read = readSet();
+  const today = todayKey();
+  const grid = list => `<div class="mat-grid">${list.map(m => card(m, read)).join('')}</div>`;
   const draw = () => {
     $$('#matTabs button', app).forEach(b => b.classList.toggle('on', b.dataset.t === tab));
     const body = $('#matBody');
-    if (tab === 'inti') {
-      body.innerHTML = `<div class="mat-grid">${data.core.map(m => card(m, read)).join('')}</div>`;
-    } else if (!data.daily.length) {
-      body.innerHTML = `<div class="glass card empty"><div style="font-size:44px">🗞️</div>
-        <h2 class="h2">Materi harian belum tersedia</h2>
-        <p class="muted">Materi dibuat otomatis setiap pukul 06.00 WIB dari berita terbaru. Sambil menunggu, pelajari Materi Inti dulu.</p>
-        <button class="btn sm" id="toInti">📚 Buka Materi Inti</button></div>`;
-      $('#toInti').onclick = () => { tab = 'inti'; draw(); };
-    } else {
-      const groups = new Map();
-      for (const m of data.daily) { const k = m.day || 'lain'; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(m); }
-      const unread = data.daily.filter(m => m.day === todayKey() && !read.has(m.id)).length;
-      body.innerHTML = `
+    const todays = data.daily.filter(m => m.day === today);
+    if (tab === 'inti') { body.innerHTML = grid(data.core); return; }
+    if (tab === 'hari') {
+      const unread = todays.filter(m => !read.has(m.id)).length;
+      body.innerHTML = todays.length ? `
         ${unread ? `<div class="glass bank-card row" style="gap:12px"><span style="font-size:28px">🔔</span><div><b>${unread} materi baru hari ini belum kamu baca</b><div class="dim">Baca 5 menit, lalu langsung latihan soal topiknya.</div></div></div>` : ''}
-        ${[...groups.entries()].map(([day, list]) => `
-          <h2 class="h2 mat-day">${esc(dayLabel(day))} <span class="dim" style="font-weight:600">· ${list.length} materi</span></h2>
-          <div class="mat-grid">${list.map(m => card(m, read)).join('')}</div>`).join('')}`;
+        <h2 class="h2 mat-day">${esc(dayLabel(today))} <span class="dim" style="font-weight:600">· ${todays.length} materi</span></h2>${grid(todays)}
+        ${data.daily.length > todays.length ? `<button class="btn ghost block" id="toArsip" style="margin-top:14px">📚 Lihat ${data.daily.length - todays.length} materi hari sebelumnya</button>` : ''}`
+        : `<div class="glass card empty"><div style="font-size:44px">🗞️</div><h2 class="h2">Materi hari ini belum tersedia</h2>
+          <p class="muted">Materi baru dibuat otomatis setiap pukul 06.00 WIB dari berita terbaru.${data.daily.length ? ' Sambil menunggu, buka arsip berita sebelumnya.' : ''}</p>
+          <div class="row wrap" style="justify-content:center">${data.daily.length ? '<button class="btn sm" id="toArsip">📚 Semua Berita</button>' : ''}<button class="btn ghost sm" id="toInti">📘 Materi Inti</button></div></div>`;
+      $('#toArsip')?.addEventListener('click', () => { tab = 'arsip'; draw(); });
+      $('#toInti')?.addEventListener('click', () => { tab = 'inti'; draw(); });
+      return;
     }
+    // Arsip semua berita
+    const cats = [...new Set(data.daily.map(m => m.category))];
+    const list = data.daily.filter(m => filter === 'all' || m.category === filter);
+    const groups = new Map();
+    for (const m of list) { const k = m.day || 'lain'; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(m); }
+    const max = data.max || 50;
+    body.innerHTML = !data.daily.length
+      ? `<div class="glass card empty"><div style="font-size:44px">📚</div>Arsip masih kosong. Materi harian akan menumpuk di sini setiap hari.</div>`
+      : `<div class="glass card arsip-head">
+          <div class="row between wrap" style="gap:10px"><div><b>📚 Arsip berita</b><div class="dim">${data.daily.length} dari maksimal ${max} materi tersimpan · materi terlama terhapus otomatis</div></div>
+            <div class="arsip-meter"><i style="width:${Math.min(100, (data.daily.length / max) * 100)}%"></i></div></div>
+          <div class="pill-group" style="margin-top:12px" id="catFilter">
+            <button class="pill ${filter === 'all' ? 'on' : ''}" data-f="all">Semua</button>
+            ${cats.map(c => `<button class="pill ${filter === c ? 'on' : ''}" data-f="${c}">${catByKey[c]?.ico || ''} ${esc(catByKey[c]?.name || c)}</button>`).join('')}
+          </div></div>
+        ${[...groups.entries()].map(([day, l]) => `<h2 class="h2 mat-day">${esc(dayLabel(day))} <span class="dim" style="font-weight:600">· ${l.length} materi</span></h2>${grid(l)}`).join('') || '<div class="empty">Tidak ada materi untuk topik ini.</div>'}`;
+    $$('#catFilter [data-f]', body).forEach(b => (b.onclick = () => { filter = b.dataset.f; draw(); }));
   };
   $$('#matTabs button', app).forEach(b => (b.onclick = () => { tab = b.dataset.t; draw(); history.replaceState(null, '', `#/materi?tab=${tab}`); }));
   $('#matRefresh').onclick = async () => {
@@ -92,7 +109,7 @@ async function renderDetail(app, id) {
   const read = readSet().has(m.id);
   app.innerHTML = `
   <article class="stack fade-in mat-article">
-    <a href="#/materi${m.core ? '?tab=inti' : ''}" class="link-btn" style="font-size:14px">← Semua materi</a>
+    <a href="#/materi?tab=${m.core ? 'inti' : m.day === todayKey() ? 'hari' : 'arsip'}" class="link-btn" style="font-size:14px">← Kembali ke materi</a>
     <header class="glass hero-card">
       <div class="row wrap" style="gap:6px">
         <span class="chip">${c.ico || '📘'} ${esc(c.name || m.category)}</span>
