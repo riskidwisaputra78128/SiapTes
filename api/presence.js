@@ -1,7 +1,8 @@
 // Status online pengguna
 // POST /api/presence { page, duel?, hidden? }  → heartbeat (±45 dtk sekali) + daftar yang online
 // GET  /api/presence                           → daftar yang online (tamu hanya mendapat jumlah)
-import { handle, readBody, send } from './_lib/http.js';
+import { handle, readBody, send, query } from './_lib/http.js';
+import { avatarRoute } from './_lib/avatar-route.js';
 import { getUser, requireUser } from './_lib/auth.js';
 import { getDB } from './_lib/db.js';
 import { avatarMap, avatarUrl } from './_lib/avatar.js';
@@ -21,7 +22,7 @@ async function onlineList(db, meUid) {
     }));
 }
 
-export default handle(['GET', 'POST'], async (req, res) => {
+const presenceRoute = handle(['GET', 'POST'], async (req, res) => {
   const db = await getDB();
   if (req.method === 'GET') {
     const me = getUser(req);
@@ -44,3 +45,9 @@ export default handle(['GET', 'POST'], async (req, res) => {
   const list = await onlineList(db, user.uid);
   send(res, 200, { count: list.length, users: list, hidden: !!b.hidden });
 });
+
+// Foto profil ikut di endpoint ini agar total function tetap 12 (batas paket Hobby)
+export default function (req, res) {
+  const q = query(req);
+  return q.get('avatar') || q.get('op') === 'avatar' ? avatarRoute(req, res) : presenceRoute(req, res);
+}

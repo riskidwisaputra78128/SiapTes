@@ -19,5 +19,5 @@ export function bumpCache(pid, v) { if (cache) { if (v) cache.map[pid] = v; else
 export function avatarUrl(uid, map) {
   if (!uid) return null;
   const pid = pidOf(uid); const v = map?.[pid];
-  return v ? `/api/avatar?id=${pid}&v=${v}` : null;
+  return v ? `/api/presence?avatar=${pid}&v=${v}` : null;
 }

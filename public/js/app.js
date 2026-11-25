@@ -1,5 +1,5 @@
 import { api, session, getInfo } from './api.js';
-import { $, $$, esc, toast, bindTilt, icons, fmt, timeAgo, countUp, avatar } from './ui.js';
+import { $, $$, esc, toast, bindTilt, icons, fmt, timeAgo, countUp, avatar, sheet } from './ui.js';
 import { CATEGORIES, TARGETS, catByKey } from './data.js';
 import { initBackground } from './three-bg.js';
 import { renderSetup, renderQuiz, renderResult, practice } from './practice.js';
@@ -374,16 +374,72 @@ function loadImage(file) {
     img.src = url;
   });
 }
-async function squareJPEG(file, size = 256) {
-  if (file.size > 15 * 1024 * 1024) throw new Error('Foto terlalu besar (maks 15 MB)');
-  const img = await loadImage(file);
-  const s = Math.min(img.naturalWidth, img.naturalHeight);
-  const c = document.createElement('canvas'); c.width = c.height = size;
-  const x = c.getContext('2d');
-  x.fillStyle = '#fff'; x.fillRect(0, 0, size, size);
-  x.drawImage(img, (img.naturalWidth - s) / 2, (img.naturalHeight - s) / 2, s, s, 0, 0, size, size);
-  for (const q of [0.86, 0.75, 0.6, 0.45]) { const d = c.toDataURL('image/jpeg', q); if (d.length < 120000) return d; }
-  return c.toDataURL('image/jpeg', 0.35);
+// Editor foto: geser untuk memposisikan, zoom pakai slider / scroll / cubit 2 jari
+function openCropper(img) {
+  return new Promise(resolve => {
+    const S = 280, OUT = 256;
+    let done = false;
+    const closeSheet = sheet(`
+      <div class="row between"><h3 class="h2">✂️ Atur foto profil</h3><span class="dim">Geser & zoom</span></div>
+      <div class="crop-stage" id="cropStage"><canvas id="cropCv" width="${S * 2}" height="${S * 2}"></canvas><div class="crop-mask"></div></div>
+      <div class="crop-ctl">
+        <button class="btn ghost sm" id="czOut" aria-label="Perkecil">−</button>
+        <input type="range" id="cropZoom" min="1" max="4" step="0.01" value="1" aria-label="Zoom">
+        <button class="btn ghost sm" id="czIn" aria-label="Perbesar">+</button>
+        <button class="btn ghost sm" id="cRot" aria-label="Putar">⟳</button>
+      </div>
+      <div class="row" style="gap:8px;margin-top:12px"><button class="btn ghost" id="cCancel" style="flex:1">Batal</button><button class="btn" id="cSave" style="flex:2">💾 Simpan foto</button></div>`,
+    (el, close) => {
+      const cv = $('#cropCv', el), ctx = cv.getContext('2d'), stage = $('#cropStage', el), zoom = $('#cropZoom', el);
+      let rot = 0, z = 1, ox = 0, oy = 0;
+      const dims = () => rot % 180 ? [img.naturalHeight, img.naturalWidth] : [img.naturalWidth, img.naturalHeight];
+      const base = () => { const [w, h] = dims(); return S / Math.min(w, h); };
+      const clamp = () => {
+        const [w, h] = dims(), k = base() * z;
+        const mx = Math.max(0, (w * k - S) / 2), my = Math.max(0, (h * k - S) / 2);
+        ox = Math.max(-mx, Math.min(mx, ox)); oy = Math.max(-my, Math.min(my, oy));
+      };
+      const paint = (c, size) => {
+        const f = size / S, k = base() * z * f;
+        c.save(); c.fillStyle = '#fff'; c.fillRect(0, 0, size, size);
+        c.translate(size / 2 + ox * f, size / 2 + oy * f); c.rotate(rot * Math.PI / 180);
+        c.drawImage(img, -img.naturalWidth * k / 2, -img.naturalHeight * k / 2, img.naturalWidth * k, img.naturalHeight * k);
+        c.restore();
+      };
+      const draw = () => { clamp(); paint(ctx, S * 2); };
+      const setZ = (v, keep = true) => { const nz = Math.max(1, Math.min(4, v)); if (keep) { ox *= nz / z; oy *= nz / z; } z = nz; zoom.value = z; draw(); };
+      draw();
+      zoom.oninput = () => setZ(+zoom.value);
+      $('#czIn', el).onclick = () => setZ(z + 0.25);
+      $('#czOut', el).onclick = () => setZ(z - 0.25);
+      $('#cRot', el).onclick = () => { rot = (rot + 90) % 360; ox = oy = 0; draw(); };
+      stage.addEventListener('wheel', e => { e.preventDefault(); setZ(z * (e.deltaY < 0 ? 1.08 : 0.93)); }, { passive: false });
+      const pts = new Map(); let pinch = null;
+      stage.addEventListener('pointerdown', e => { stage.setPointerCapture(e.pointerId); pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); });
+      stage.addEventListener('pointermove', e => {
+        const prev = pts.get(e.pointerId); if (!prev) return;
+        const cur = { x: e.clientX, y: e.clientY }; pts.set(e.pointerId, cur);
+        if (pts.size === 2) {
+          const [a, b] = [...pts.values()], d = Math.hypot(a.x - b.x, a.y - b.y);
+          if (pinch) setZ(z * d / pinch); pinch = d;
+        } else { const r = stage.getBoundingClientRect().width / S; ox += (cur.x - prev.x) / r; oy += (cur.y - prev.y) / r; draw(); }
+      });
+      const up = e => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; };
+      stage.addEventListener('pointerup', up); stage.addEventListener('pointercancel', up);
+      const finish = v => { if (done) return; done = true; close(); resolve(v); };
+      $('#cCancel', el).onclick = () => finish(null);
+      $('#cSave', el).onclick = () => {
+        const out = document.createElement('canvas'); out.width = out.height = OUT;
+        paint(out.getContext('2d'), OUT);
+        let d = null; for (const q of [0.88, 0.78, 0.62, 0.45, 0.35]) { d = out.toDataURL('image/jpeg', q); if (d.length < 120000) break; }
+        finish(d);
+      };
+    });
+    // tutup lewat klik latar = batal
+    const bd = document.querySelector('.sheet-backdrop:last-of-type');
+    if (bd) bd.addEventListener('click', () => { if (!done) { done = true; resolve(null); } });
+    void closeSheet;
+  });
 }
 function bindPhoto() {
   const file = $('#pfFile'); if (!file) return;
@@ -391,10 +447,16 @@ function bindPhoto() {
   $('#pfPick').onclick = pick; $('#pfUp').onclick = pick;
   file.onchange = async () => {
     const f = file.files[0]; file.value = ''; if (!f) return;
+    let img;
+    try {
+      if (f.size > 15 * 1024 * 1024) throw new Error('Foto terlalu besar (maks 15 MB)');
+      img = await loadImage(f);
+    } catch (e) { return toast(e.message, 'err'); }
+    const image = await openCropper(img);
+    if (!image) return;
     const btn = $('#pfUp'); btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Mengunggah…';
     try {
-      const image = await squareJPEG(f);
-      const r = await api('/avatar', { method: 'POST', body: { image } });
+      const r = await api('/presence?op=avatar', { method: 'POST', body: { image } });
       session.patch({ avatar: r.avatar });
       toast('Foto profil diperbarui 🎉', 'ok');
       paintAvatarBtn(); renderProfile(); refreshPresence();
@@ -404,7 +466,7 @@ function bindPhoto() {
   if (del) del.onclick = async () => {
     if (!confirmDelete()) return;
     del.disabled = true;
-    try { await api('/avatar', { method: 'DELETE' }); session.patch({ avatar: null }); toast('Foto profil dihapus'); paintAvatarBtn(); renderProfile(); }
+    try { await api('/presence?op=avatar', { method: 'DELETE' }); session.patch({ avatar: null }); toast('Foto profil dihapus'); paintAvatarBtn(); renderProfile(); }
     catch (e) { toast(e.message, 'err'); del.disabled = false; }
   };
 }
@@ -417,7 +479,7 @@ function confirmDelete() {
 // sinkronkan foto dari server (mis. diganti di perangkat lain)
 function syncAvatar() {
   if (!session.loggedIn) return;
-  api('/avatar?me=1').then(r => { if ((r.avatar || null) !== (session.user?.avatar || null)) { session.patch({ avatar: r.avatar }); paintAvatarBtn(); } }).catch(() => {});
+  api('/presence?op=avatar&me=1').then(r => { if ((r.avatar || null) !== (session.user?.avatar || null)) { session.patch({ avatar: r.avatar }); paintAvatarBtn(); } }).catch(() => {});
 }
 
 /* ───────── Profil ───────── */
