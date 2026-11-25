@@ -7,6 +7,7 @@ import { renderStats, renderLeaderboard } from './stats.js';
 import { renderTech } from './tech.js';
 import { renderMateri, getMaterials } from './materi.js';
 import { renderDuel } from './duel.js';
+import { renderAdminLive } from './admin-live.js';
 import { startPresence, onlineWidget, isHidden, setHidden, presence } from './presence.js';
 import { applyTheme, currentTheme, openThemePicker, THEMES } from './theme.js';
 
@@ -55,6 +56,7 @@ async function route() {
       case 'teknologi': renderTech(app); break;
       case 'materi': await renderMateri(app, params); break;
       case 'duel': await renderDuel(app, params); break;
+      case 'command': await renderAdminLive(app); break;
       default: await renderHome();
     }
   } catch (e) {
@@ -363,6 +365,8 @@ function renderProfile() {
     ${u.admin ? `
     <div class="glass card">
       <h2 class="h2">⚙️ Panel Admin</h2>
+      <a class="glass card row tilt" href="#/command" style="gap:14px;margin:12px 0"><span style="font-size:30px">🏢</span>
+        <div style="flex:1"><b>Command Center</b><div class="dim">Visualisasi 3D aktivitas pengguna & sistem secara live</div></div><span class="grad-text" style="font-weight:800">Buka →</span></a>
       <p class="muted" style="margin:6px 0 12px">Buat soal baru dari berita hari ini (Gemini). Otomatis juga berjalan setiap hari pukul 06.00 WIB.</p>
       <div id="sysStatus" class="dim">Memuat status…</div>
       <div class="row wrap" style="margin-top:12px"><button class="btn sm" id="genBtn">✨ Generate soal sekarang</button></div>

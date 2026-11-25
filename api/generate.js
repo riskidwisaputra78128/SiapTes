@@ -157,7 +157,11 @@ export default handle(['GET', 'POST'], async (req, res) => {
     cats = [...new Set(cats)];
   }
 
-  const results = await Promise.allSettled(cats.map(generateFor));
+  const dbg = await getDB();
+  await dbg.setMeta('genStatus', { running: true, at: Date.now(), by, cats }).catch(() => {});
+  let results;
+  try { results = await Promise.allSettled(cats.map(generateFor)); }
+  finally { await dbg.setMeta('genStatus', { running: false, at: Date.now(), by }).catch(() => {}); }
   const summary = results.map((r, i) => r.status === 'fulfilled'
     ? { cat: r.value.cat, saved: r.value.saved, material: r.value.material || 0, reason: r.value.reason }
     : { cat: cats[i], saved: 0, reason: String(r.reason?.message || r.reason).slice(0, 160) });
