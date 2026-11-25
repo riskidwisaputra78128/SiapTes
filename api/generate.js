@@ -7,6 +7,7 @@ import { getUser, isAdmin } from './_lib/auth.js';
 import { getDB } from './_lib/db.js';
 import { aiEnabled, geminiJSON } from './_lib/ai.js';
 import { NEWS_TOPICS, fetchHeadlines } from './_lib/news.js';
+import { dayKey } from './_lib/http.js';
 
 const CAT_LABEL = {
   bi: 'Bank Indonesia, kebijakan moneter & sistem pembayaran',
@@ -66,6 +67,42 @@ function id(cat, text) {
   return `n-${cat}-${crypto.createHash('sha1').update(text.toLowerCase()).digest('hex').slice(0, 12)}`;
 }
 
+async function materialFor(cat, headlines, today) {
+  const out = await geminiJSON(`Kamu mentor persiapan tes seleksi kerja Indonesia (CPNS, BUMN, OJK, Bank Indonesia, Telkom).
+Hari ini ${today}. Topik: ${CAT_LABEL[cat]}.
+
+Judul berita terbaru (index: judul — media):
+${headlines.map((h, i) => `${i}: ${h.title} — ${h.source}`).join('\n')}
+
+Tulis SATU materi belajar harian berbahasa Indonesia yang merangkum perkembangan terbaru di atas dan mengaitkannya dengan konsep yang sering diujikan.
+Aturan:
+- Hanya gunakan fakta yang jelas dari judul berita + pengetahuan umum yang mapan (dasar hukum, fungsi lembaga, konsep ekonomi). Jangan mengarang angka, tanggal, atau kutipan.
+- Gaya ringkas, jelas, mudah dipahami pelajar.
+Format JSON:
+{"title":"judul menarik maks 80 karakter",
+ "summary":"2-3 kalimat ringkasan",
+ "sections":[{"heading":"...","body":"1 paragraf 3-5 kalimat"}],   // 3-4 bagian: apa yang terjadi, konsep/dasar hukum terkait, dampak, kaitan dengan tes
+ "keyPoints":["poin kunci singkat"],                              // 3-5
+ "glossary":[{"term":"istilah","def":"definisi singkat"}],          // 3-5
+ "tips":["tips menjawab soal terkait topik ini"],                  // 2-3
+ "sourceIndexes":[0,1]}`);
+  const str = v => String(v || '').trim();
+  const sections = (out.sections || []).map(x => ({ heading: str(x.heading), body: str(x.body) })).filter(x => x.heading && x.body).slice(0, 5);
+  if (!str(out.title) || sections.length < 2) return null;
+  const sources = [...new Set((out.sourceIndexes || []).map(Number))].map(i => headlines[i]).filter(Boolean)
+    .map(h => ({ title: h.title, link: h.link, publisher: h.source, date: h.date }));
+  const words = [out.summary, ...sections.map(x => x.body)].join(' ').split(/\s+/).length;
+  const day = dayKey(Date.now());
+  return {
+    id: `m-${day}-${cat}`, day, category: cat, title: str(out.title).slice(0, 120), summary: str(out.summary),
+    sections, keyPoints: (out.keyPoints || []).map(str).filter(Boolean).slice(0, 6),
+    glossary: (out.glossary || []).map(g => ({ term: str(g.term), def: str(g.def) })).filter(g => g.term && g.def).slice(0, 6),
+    tips: (out.tips || []).map(str).filter(Boolean).slice(0, 4),
+    sources: sources.length ? sources : headlines.slice(0, 3).map(h => ({ title: h.title, link: h.link, publisher: h.source, date: h.date })),
+    readMin: Math.max(2, Math.round(words / 180)), createdAt: Date.now(), generated: true,
+  };
+}
+
 async function generateFor(cat) {
   const lists = await Promise.all(NEWS_TOPICS[cat].map(q => fetchHeadlines(q, 6)));
   const seen = new Set();
@@ -73,6 +110,7 @@ async function generateFor(cat) {
   if (headlines.length < 2) return { cat, saved: 0, reason: 'berita tidak ditemukan', headlines: [] };
 
   const today = new Date().toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', dateStyle: 'long' });
+  const matP = materialFor(cat, headlines, today).catch(e => { console.error('materi', cat, e.message); return null; });
   const out = await geminiJSON(`Kamu penyusun soal tes seleksi kerja Indonesia (CPNS SKD, BUMN/Rekrutmen Bersama, OJK, Bank Indonesia PCPM, Telkom).
 Hari ini ${today}. Topik: ${CAT_LABEL[cat]}.
 
@@ -98,7 +136,9 @@ Format JSON:
   const qs = (out.questions || []).map(q => validate(q, cat, headlines)).filter(Boolean);
   const db = await getDB();
   const saved = qs.length ? await db.addQuestions(qs) : 0;
-  return { cat, saved, headlines };
+  const mat = await matP;
+  if (mat) await db.addMaterials([mat]);
+  return { cat, saved, material: mat ? 1 : 0, headlines };
 }
 
 export default handle(['GET', 'POST'], async (req, res) => {
@@ -119,12 +159,12 @@ export default handle(['GET', 'POST'], async (req, res) => {
 
   const results = await Promise.allSettled(cats.map(generateFor));
   const summary = results.map((r, i) => r.status === 'fulfilled'
-    ? { cat: r.value.cat, saved: r.value.saved, reason: r.value.reason }
+    ? { cat: r.value.cat, saved: r.value.saved, material: r.value.material || 0, reason: r.value.reason }
     : { cat: cats[i], saved: 0, reason: String(r.reason?.message || r.reason).slice(0, 160) });
 
   const headlines = results.flatMap(r => (r.status === 'fulfilled' ? r.value.headlines.slice(0, 3).map(h => ({ ...h, cat: r.value.cat })) : []));
   const db = await getDB();
-  const log = { at: Date.now(), by, summary, total: summary.reduce((s, x) => s + x.saved, 0) };
+  const log = { at: Date.now(), by, summary, total: summary.reduce((s, x) => s + x.saved, 0), materials: summary.reduce((s, x) => s + (x.material || 0), 0) };
   await db.setMeta('lastGenerate', log);
   if (headlines.length) await db.setMeta('news', { at: Date.now(), items: headlines });
   send(res, 200, log);

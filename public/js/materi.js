@@ -1,0 +1,132 @@
+import { api, session } from './api.js';
+import { $, $$, esc, toast, timeAgo, confetti } from './ui.js';
+import { catByKey } from './data.js';
+
+const READ_KEY = 'sl_read';
+const readSet = () => { try { return new Set(JSON.parse(localStorage.getItem(READ_KEY) || '[]')); } catch { return new Set(); } };
+const markRead = id => { try { const s = readSet(); s.add(id); localStorage.setItem(READ_KEY, JSON.stringify([...s].slice(-500))); } catch {} };
+
+const todayKey = () => new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10);
+function dayLabel(day) {
+  if (!day) return '';
+  const t = todayKey();
+  const y = new Date(Date.parse(t) - 86400e3).toISOString().slice(0, 10);
+  if (day === t) return 'Hari ini';
+  if (day === y) return 'Kemarin';
+  return new Date(day + 'T00:00:00+07:00').toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long' });
+}
+
+let listCache = null;
+export async function getMaterials(force = false) {
+  if (!listCache || force || Date.now() - listCache.at > 60000) listCache = { at: Date.now(), p: api('/materials') };
+  return listCache.p;
+}
+
+function card(m, read) {
+  const c = catByKey[m.category] || {};
+  const isNew = m.day === todayKey();
+  return `
+    <a class="glass mat-card tilt ${read.has(m.id) ? 'read' : ''}" href="#/materi?id=${encodeURIComponent(m.id)}">
+      <span class="glow" style="background:${c.color || '#818cf8'}"></span>
+      <div class="row wrap" style="gap:6px">
+        <span class="chip">${c.ico || '📘'} ${esc(c.name || m.category)}</span>
+        ${isNew ? '<span class="chip new">BARU</span>' : ''}
+        ${read.has(m.id) ? '<span class="chip" style="color:var(--green)">✓ Dibaca</span>' : ''}
+      </div>
+      <b class="mat-title">${esc(m.title)}</b>
+      <p class="mat-sum">${esc(m.summary)}</p>
+      <div class="dim">⏱️ ${m.readMin} menit baca${m.sourcesCount ? ` · 📰 ${m.sourcesCount} sumber` : ''}</div>
+    </a>`;
+}
+
+export async function renderMateri(app, params) {
+  const id = params.get('id');
+  if (id) return renderDetail(app, id);
+  let tab = params.get('tab') === 'inti' ? 'inti' : 'harian';
+  app.innerHTML = `
+  <section class="stack fade-in">
+    <div class="row between wrap">
+      <div><h1 class="h1">📖 Materi belajar</h1><p class="muted" style="margin:0">Rangkuman berita terbaru setiap pagi + materi inti setiap tes.</p></div>
+      <div class="tabs" id="matTabs"><button data-t="harian">🗞️ Update Harian</button><button data-t="inti">📚 Materi Inti</button></div>
+    </div>
+    <div id="matBody"><div class="skeleton" style="height:240px"></div></div>
+  </section>`;
+  const data = await getMaterials();
+  const read = readSet();
+  const draw = () => {
+    $$('#matTabs button', app).forEach(b => b.classList.toggle('on', b.dataset.t === tab));
+    const body = $('#matBody');
+    if (tab === 'inti') {
+      body.innerHTML = `<div class="mat-grid">${data.core.map(m => card(m, read)).join('')}</div>`;
+    } else if (!data.daily.length) {
+      body.innerHTML = `<div class="glass card empty"><div style="font-size:44px">🗞️</div>
+        <h2 class="h2">Materi harian belum tersedia</h2>
+        <p class="muted">Materi dibuat otomatis setiap pukul 06.00 WIB dari berita terbaru. Sambil menunggu, pelajari Materi Inti dulu.</p>
+        <button class="btn sm" id="toInti">📚 Buka Materi Inti</button></div>`;
+      $('#toInti').onclick = () => { tab = 'inti'; draw(); };
+    } else {
+      const groups = new Map();
+      for (const m of data.daily) { const k = m.day || 'lain'; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(m); }
+      const unread = data.daily.filter(m => m.day === todayKey() && !read.has(m.id)).length;
+      body.innerHTML = `
+        ${unread ? `<div class="glass bank-card row" style="gap:12px"><span style="font-size:28px">🔔</span><div><b>${unread} materi baru hari ini belum kamu baca</b><div class="dim">Baca 5 menit, lalu langsung latihan soal topiknya.</div></div></div>` : ''}
+        ${[...groups.entries()].map(([day, list]) => `
+          <h2 class="h2 mat-day">${esc(dayLabel(day))} <span class="dim" style="font-weight:600">· ${list.length} materi</span></h2>
+          <div class="mat-grid">${list.map(m => card(m, read)).join('')}</div>`).join('')}`;
+    }
+  };
+  $$('#matTabs button', app).forEach(b => (b.onclick = () => { tab = b.dataset.t; draw(); history.replaceState(null, '', `#/materi?tab=${tab}`); }));
+  draw();
+}
+
+async function renderDetail(app, id) {
+  app.innerHTML = '<div class="skeleton" style="height:420px"></div>';
+  const { material: m } = await api('/materials?id=' + encodeURIComponent(id));
+  const c = catByKey[m.category] || {};
+  const read = readSet().has(m.id);
+  app.innerHTML = `
+  <article class="stack fade-in mat-article">
+    <a href="#/materi${m.core ? '?tab=inti' : ''}" class="link-btn" style="font-size:14px">← Semua materi</a>
+    <header class="glass hero-card">
+      <div class="row wrap" style="gap:6px">
+        <span class="chip">${c.ico || '📘'} ${esc(c.name || m.category)}</span>
+        <span class="chip">${m.core ? '📚 Materi Inti' : `🗞️ ${esc(dayLabel(m.day))}`}</span>
+        <span class="chip">⏱️ ${m.readMin} menit</span>
+      </div>
+      <h1 class="h1" style="margin-top:12px">${esc(m.title)}</h1>
+      <p class="muted" style="margin:0;font-size:16px">${esc(m.summary)}</p>
+    </header>
+
+    ${m.keyPoints?.length ? `<div class="glass card"><h2 class="h2">🎯 Poin kunci</h2>
+      <ul class="kp-list">${m.keyPoints.map(k => `<li>${esc(k)}</li>`).join('')}</ul></div>` : ''}
+
+    ${m.sections.map((s, i) => `
+      <section class="glass card mat-sec" style="animation-delay:${i * 0.06}s">
+        <h2 class="h2"><span class="sec-no">${i + 1}</span>${esc(s.heading)}</h2>
+        ${s.body.split(/\n+/).map(p => `<p>${esc(p)}</p>`).join('')}
+      </section>`).join('')}
+
+    ${m.glossary?.length ? `<div class="glass card"><h2 class="h2" style="margin-bottom:12px">📒 Istilah penting <span class="dim" style="font-weight:600">· ketuk kartu</span></h2>
+      <div class="gloss-grid">${m.glossary.map(g => `
+        <button class="gloss" aria-label="${esc(g.term)}"><span class="gloss-in"><span class="gloss-f">${esc(g.term)}</span><span class="gloss-b">${esc(g.def)}</span></span></button>`).join('')}</div></div>` : ''}
+
+    ${m.tips?.length ? `<div class="glass card"><h2 class="h2">💡 Tips menjawab soal</h2>
+      <div class="stack" style="gap:8px;margin-top:10px">${m.tips.map(t => `<div class="tip good"><span>✔️</span><span>${esc(t)}</span></div>`).join('')}</div></div>` : ''}
+
+    ${m.sources?.length ? `<div class="glass card"><h2 class="h2">📰 Sumber berita</h2>
+      ${m.sources.map(s => `<div class="news-item"><span class="dot"></span><div><a href="${esc(s.link)}" target="_blank" rel="noopener">${esc(s.title)}</a>
+        <div class="dim">${esc(s.publisher || '')}${s.date ? ' · ' + timeAgo(s.date) : ''}</div></div></div>`).join('')}
+      <p class="dim" style="margin:10px 0 0">Materi dirangkum otomatis oleh AI dari judul berita. Selalu cek detail di sumber aslinya.</p></div>` : ''}
+
+    <div class="glass start-bar">
+      <button class="btn ghost" id="readBtn" ${read ? 'disabled' : ''}>${read ? '✓ Sudah dibaca' : '✓ Tandai dibaca'}</button>
+      <a class="btn" style="flex:1" href="#/latihan?category=${m.category}${m.core ? '' : '&fresh=1'}">🎯 Latihan soal topik ini</a>
+    </div>
+  </article>`;
+  $$('.gloss', app).forEach(g => (g.onclick = () => g.classList.toggle('flip')));
+  $('#readBtn').onclick = () => {
+    markRead(m.id); confetti(50);
+    $('#readBtn').disabled = true; $('#readBtn').textContent = '✓ Sudah dibaca';
+    toast(session.loggedIn ? 'Mantap! Lanjutkan dengan latihan soalnya 💪' : 'Tersimpan di perangkat ini', 'ok');
+  };
+}

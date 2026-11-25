@@ -5,14 +5,17 @@ import { initBackground } from './three-bg.js';
 import { renderSetup, renderQuiz, renderResult, practice } from './practice.js';
 import { renderStats, renderLeaderboard } from './stats.js';
 import { renderTech } from './tech.js';
+import { renderMateri, getMaterials } from './materi.js';
+import { applyTheme, currentTheme, openThemePicker, THEMES } from './theme.js';
 
 const app = $('#app');
 const NAV = [
   { href: '#/', key: '', label: 'Beranda', ico: icons.home },
   { href: '#/latihan', key: 'latihan', label: 'Latihan', ico: icons.play },
+  { href: '#/materi', key: 'materi', label: 'Materi', ico: icons.book },
   { href: '#/evaluasi', key: 'evaluasi', label: 'Evaluasi', ico: icons.chart },
   { href: '#/peringkat', key: 'peringkat', label: 'Peringkat', ico: icons.trophy },
-  { href: '#/teknologi', key: 'teknologi', label: 'Teknologi', ico: icons.chip },
+  { href: '#/teknologi', key: 'teknologi', label: 'Teknologi', ico: icons.chip, desktopOnly: true },
   { href: '#/profil', key: 'profil', label: 'Profil', ico: icons.user },
 ];
 
@@ -20,7 +23,7 @@ function chrome(show, active) {
   $('#topbar').hidden = !show;
   $('#bottomnav').hidden = !show;
   if (!show) return;
-  const links = NAV.map(n => `<a href="${n.href}" class="${n.key === active ? 'on' : ''}">${n.ico}<span>${n.label}</span></a>`).join('');
+  const links = NAV.filter(n => !n.desktopOnly).map(n => `<a href="${n.href}" class="${n.key === active ? 'on' : ''}">${n.ico}<span>${n.label}</span></a>`).join('');
   $('#bottomnav').innerHTML = links;
   $('#topnav').innerHTML = NAV.map(n => `<a href="${n.href}" class="${n.key === active ? 'on' : ''}">${n.label}</a>`).join('');
   const u = session.user;
@@ -47,6 +50,7 @@ async function route() {
       case 'peringkat': await renderLeaderboard(app); break;
       case 'profil': renderProfile(); break;
       case 'teknologi': renderTech(app); break;
+      case 'materi': await renderMateri(app, params); break;
       default: await renderHome();
     }
   } catch (e) {
@@ -84,7 +88,7 @@ function renderAuth() {
         <div class="field reg" hidden><label for="fTarget">Target tes</label>
           <select id="fTarget" class="input">${TARGETS.map(t => `<option>${t}</option>`).join('')}</select></div>
         <button class="btn block" id="authBtn" type="submit">Masuk</button>
-        <p class="dim" style="text-align:center;margin:0">Belum mau daftar? <button type="button" class="link-btn" id="guestBtn">Coba sebagai tamu</button><br><small>(progres tamu tidak tersimpan)</small><br><a href="#/teknologi" class="link-btn" style="font-size:13px">⚙️ Teknologi di balik SiapLolos</a></p>
+        <p class="dim" style="text-align:center;margin:0">Belum mau daftar? <button type="button" class="link-btn" id="guestBtn">Coba sebagai tamu</button><br><small>(progres tamu tidak tersimpan)</small><br><a href="#/teknologi" class="link-btn" style="font-size:13px">⚙️ Teknologi di balik SiapLolos</a> · <button type="button" class="link-btn" id="authTheme" style="font-size:13px">🎨 Ganti tema</button></p>
       </form>
     </div>
   </section>`;
@@ -98,6 +102,7 @@ function renderAuth() {
   };
   $$('.tabs button', app).forEach(b => (b.onclick = () => setMode(b.dataset.m)));
   $('#guestBtn').onclick = () => { session.setGuest(); location.hash = '#/'; };
+  $('#authTheme').onclick = openThemePicker;
   $('#forgotBtn').onclick = () => renderForgot($('.auth-card'), $('#fEmail').value);
   bindPwToggles(app);
   getInfo().then(d => {
@@ -241,6 +246,11 @@ async function renderHome() {
   </section>
 
   <section class="section">
+    <div class="section-head"><h2 class="h2">📖 Materi terbaru</h2><a href="#/materi">Semua materi →</a></div>
+    <div class="mat-strip" id="matStrip"><div class="skeleton" style="height:120px"></div></div>
+  </section>
+
+  <section class="section">
     <div class="section-head"><h2 class="h2">Pilih mode belajar</h2></div>
     <div class="quick">
       <a class="glass mode-card tilt" href="#/latihan?mode=pg"><span class="mode-icon mi-pg">📝</span><span><b>Pilihan Ganda</b><br><span class="dim">Simulasi ujian A–D + pembahasan</span></span></a>
@@ -273,9 +283,23 @@ async function renderHome() {
       <div class="section-head"><h2 class="h2">🏆 Top minggu ini</h2><a href="#/peringkat">Semua →</a></div>
       <div id="lbMini"><div class="skeleton" style="height:160px"></div></div>
     </div>
-  </section>`;
+  </section>
+
+  <section class="section"><a class="glass card row tilt" href="#/teknologi" style="gap:14px"><span style="font-size:30px">⚙️</span>
+    <div style="flex:1"><b>Teknologi di balik SiapLolos</b><div class="dim">Vercel, GitHub, Firebase, Apps Script, Gemini, dan lainnya</div></div><span class="grad-text" style="font-weight:800">→</span></a></section>`;
 
   $('#toLogin')?.addEventListener('click', () => { session.clear(); location.hash = '#/login'; });
+
+  getMaterials().then(d => {
+    const el = $('#matStrip'); if (!el) return;
+    const list = (d.daily.length ? d.daily : d.core).slice(0, 6);
+    const isDaily = d.daily.length > 0;
+    el.innerHTML = list.map(m => {
+      const c = catByKey[m.category] || {};
+      return `<a class="glass mat-mini" href="#/materi?id=${encodeURIComponent(m.id)}"><span class="glow" style="background:${c.color || '#818cf8'}"></span>
+        <span class="dim">${c.ico || '📘'} ${esc(c.name || '')}</span><b>${esc(m.title)}</b><span class="dim">⏱️ ${m.readMin} mnt${isDaily && m.day ? ' · ' + (m.day === new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10) ? '<span style="color:var(--cyan)">Hari ini</span>' : m.day) : ''}</span></a>`;
+    }).join('') + (isDaily ? '' : '<div class="dim" style="align-self:center;padding:0 8px">Materi harian dari berita muncul setiap pagi 06.00 WIB</div>');
+  }).catch(() => { const el = $('#matStrip'); if (el) el.innerHTML = ''; });
 
   getInfo().then(d => {
     renderBank(d.bank);
@@ -341,8 +365,13 @@ function renderProfile() {
       <h2 class="h2">Tentang akun</h2>
       <p class="muted" style="margin:6px 0 0">Akun tersimpan aman di Google Sheet melalui Google Apps Script (kata sandi di-hash). Riwayat latihan tersimpan di Firebase.</p>
     </div>
+    <button class="glass card row tilt" id="profTheme" style="gap:14px;text-align:left;width:100%"><span style="font-size:28px">🎨</span>
+      <div style="flex:1"><b>Tema tampilan</b><div class="dim" id="profThemeName"></div></div><span class="grad-text" style="font-weight:800">Ganti →</span></button>
+    <a class="btn ghost block" href="#/teknologi">⚙️ Teknologi di balik SiapLolos</a>
     <button class="btn ghost block" id="logoutBtn">Keluar</button>
   </section>`;
+  const tn = () => { const t = THEMES.find(x => x.key === currentTheme()); $('#profThemeName') && ($('#profThemeName').textContent = `${t.ico} ${t.name} — ${t.desc}`); };
+  tn(); $('#profTheme').onclick = openThemePicker; window.addEventListener('theme:change', tn);
   $('#logoutBtn').onclick = () => { session.clear(); toast('Kamu telah keluar'); location.hash = '#/login'; };
   api('/stats').then(s => {
     const v = [s.summary.allTime.questions, s.summary.allTime.accuracy, s.summary.allTime.points];
@@ -358,8 +387,8 @@ function renderProfile() {
       const b = $('#genBtn'); b.disabled = true; b.innerHTML = '<span class="spinner"></span> Membuat soal…';
       try {
         const r = await api('/generate', { method: 'POST' });
-        $('#genOut').textContent = r.summary.map(s => `${catByKey[s.cat]?.name || s.cat}: ${s.saved} soal${s.reason ? ' — ' + s.reason : ''}`).join('\n');
-        toast(`${r.total} soal baru ditambahkan`, 'ok');
+        $('#genOut').textContent = r.summary.map(s => `${catByKey[s.cat]?.name || s.cat}: ${s.saved} soal, ${s.material || 0} materi${s.reason ? ' — ' + s.reason : ''}`).join('\n');
+        toast(`${r.total} soal & ${r.materials || 0} materi baru ditambahkan`, 'ok');
       } catch (e) { toast(e.message, 'err'); }
       b.disabled = false; b.textContent = '✨ Generate soal sekarang';
     };
@@ -370,5 +399,7 @@ window.addEventListener('hashchange', route);
 window.addEventListener('auth:expired', () => { toast('Sesi berakhir, silakan masuk lagi', 'err'); location.hash = '#/login'; });
 window.addEventListener('beforeunload', e => { if (practice.active) { e.preventDefault(); e.returnValue = ''; } });
 
+applyTheme(currentTheme(), { save: false });
+$('#themeBtn').onclick = openThemePicker;
 route();
 initBackground($('#bg3d'));

@@ -1,4 +1,13 @@
-// Latar 3D: kristal low-poly melayang + partikel, ringan untuk HP
+// Latar 3D: kristal low-poly melayang + partikel, ringan untuk HP. Warna mengikuti tema.
+const PALETTES = {
+  dark: { colors: [0x22d3ee, 0x818cf8, 0xc084fc, 0x38bdf8, 0xfbbf24], fog: 0x070b1a, fogD: 0.045, star: 0x9fb4ff, starO: 0.8, em: 0.12, wire: 0.18 },
+  light: { colors: [0x67e8f9, 0xa5b4fc, 0xd8b4fe, 0x7dd3fc, 0xfcd34d], fog: 0xeef2fb, fogD: 0.03, star: 0x6366f1, starO: 0.35, em: 0.25, wire: 0.25 },
+  dongeng: { colors: [0xf9a8d4, 0xc4b5fd, 0x93c5fd, 0xfcd34d, 0xfbcfe8], fog: 0xfdf2fb, fogD: 0.028, star: 0xf59e0b, starO: 0.9, em: 0.35, wire: 0.35 },
+  modern: { colors: [0xa3e635, 0x22d3ee, 0xf472b6, 0x52525b, 0x3f3f46], fog: 0x09090b, fogD: 0.05, star: 0xd4d4d8, starO: 0.5, em: 0.08, wire: 0.12 },
+  pro: { colors: [0x1e3a8a, 0x3b82f6, 0x94a3b8, 0xcbd5e1, 0xb7791f], fog: 0xf5f6f8, fogD: 0.04, star: 0x1e3a8a, starO: 0.2, em: 0.05, wire: 0.2 },
+};
+const themeKey = () => document.documentElement.getAttribute('data-theme') || 'dark';
+
 export async function initBackground(canvas) {
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const small = innerWidth < 700;
@@ -13,6 +22,7 @@ export async function initBackground(canvas) {
 
   const scene = new THREE.Scene();
   scene.fog = new THREE.FogExp2(0x070b1a, 0.045);
+  const wires = [];
   const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 100);
   camera.position.set(0, 0, 14);
 
@@ -24,7 +34,9 @@ export async function initBackground(canvas) {
     new THREE.IcosahedronGeometry(1, 0), new THREE.OctahedronGeometry(1, 0),
     new THREE.TorusGeometry(0.8, 0.28, 10, 24), new THREE.DodecahedronGeometry(1, 0), new THREE.TetrahedronGeometry(1.1, 0),
   ];
-  const palette = [0x22d3ee, 0x818cf8, 0xc084fc, 0x38bdf8, 0xfbbf24];
+  let pal = PALETTES[themeKey()] || PALETTES.dark;
+  const palette = pal.colors;
+  scene.fog.color.set(pal.fog); scene.fog.density = pal.fogD;
   const group = new THREE.Group(); scene.add(group);
   const count = small ? 9 : 16;
   const items = [];
@@ -38,7 +50,7 @@ export async function initBackground(canvas) {
     mesh.userData = { rx: (Math.random() - 0.5) * 0.01, ry: (Math.random() - 0.5) * 0.012, fy: Math.random() * Math.PI * 2, amp: 0.2 + Math.random() * 0.5 };
     if (i % 3 === 0) {
       const wire = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.18 }));
-      mesh.add(wire);
+      mesh.add(wire); wires.push(wire);
     }
     group.add(mesh); items.push(mesh);
   }
@@ -49,6 +61,16 @@ export async function initBackground(canvas) {
   const pg = new THREE.BufferGeometry(); pg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   const stars = new THREE.Points(pg, new THREE.PointsMaterial({ color: 0x9fb4ff, size: 0.06, transparent: true, opacity: 0.8 }));
   scene.add(stars);
+  const applyPalette = () => {
+    pal = PALETTES[themeKey()] || PALETTES.dark;
+    scene.fog.color.set(pal.fog); scene.fog.density = pal.fogD;
+    items.forEach((m, i) => { const c = pal.colors[i % pal.colors.length]; m.material.color.set(c); m.material.emissive.set(c); m.material.emissiveIntensity = pal.em; });
+    wires.forEach(w => (w.material.opacity = pal.wire));
+    stars.material.color.set(pal.star); stars.material.opacity = pal.starO;
+    if (reduced) renderer.render(scene, camera);
+  };
+  applyPalette();
+  window.addEventListener('theme:change', applyPalette);
 
   let mx = 0, my = 0, tx = 0, ty = 0, scrollY = 0;
   addEventListener('pointermove', e => { tx = (e.clientX / innerWidth - 0.5) * 2; ty = (e.clientY / innerHeight - 0.5) * 2; }, { passive: true });

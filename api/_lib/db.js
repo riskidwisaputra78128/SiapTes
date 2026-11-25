@@ -36,6 +36,7 @@ function firestoreBackend(fs) {
   const Q = fs.collection('questions');
   const A = fs.collection('attempts');
   const M = fs.collection('meta');
+  const MT = fs.collection('materials');
   return {
     kind: 'firestore',
     async addQuestions(list) {
@@ -68,6 +69,17 @@ function firestoreBackend(fs) {
       const snap = await A.where('createdAt', '>=', sinceMs).limit(8000).get();
       return snap.docs.map(d => d.data());
     },
+    async addMaterials(list) {
+      const batch = fs.batch();
+      for (const m of list) batch.set(MT.doc(m.id), m);
+      await batch.commit();
+      return list.length;
+    },
+    async listMaterials(limit = 60) {
+      const snap = await MT.orderBy('createdAt', 'desc').limit(limit).get();
+      return snap.docs.map(d => d.data());
+    },
+    async getMaterial(id) { const d = await MT.doc(id).get(); return d.exists ? d.data() : null; },
     async getMeta(key) { const d = await M.doc(key).get(); return d.exists ? d.data() : null; },
     async setMeta(key, val) { await M.doc(key).set(val, { merge: false }); },
     // Akun dev tidak dipakai di Firestore (akun disimpan di Google Sheet via Apps Script)
@@ -75,7 +87,7 @@ function firestoreBackend(fs) {
 }
 
 function memoryBackend() {
-  const g = globalThis.__siaplolosMem || (globalThis.__siaplolosMem = { q: new Map(), a: [], m: new Map(), users: new Map() });
+  const g = globalThis.__siaplolosMem || (globalThis.__siaplolosMem = { q: new Map(), a: [], m: new Map(), mt: new Map(), users: new Map() });
   return {
     kind: 'memory',
     async addQuestions(list) { for (const q of list) g.q.set(q.id, q); return list.length; },
@@ -88,6 +100,9 @@ function memoryBackend() {
     async addAttempt(a) { g.a.push(a); return String(g.a.length); },
     async listAttemptsByUser(uid, sinceMs = 0) { return g.a.filter(a => a.uid === uid && a.createdAt >= sinceMs); },
     async listAttemptsSince(sinceMs) { return g.a.filter(a => a.createdAt >= sinceMs); },
+    async addMaterials(list) { for (const m of list) g.mt.set(m.id, m); return list.length; },
+    async listMaterials(limit = 60) { return [...(g.mt || new Map()).values()].sort((a, b) => b.createdAt - a.createdAt).slice(0, limit); },
+    async getMaterial(id) { return (g.mt || new Map()).get(id) || null; },
     async getMeta(key) { return g.m.get(key) || null; },
     async setMeta(key, val) { g.m.set(key, val); },
     users: g.users,
