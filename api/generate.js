@@ -219,7 +219,8 @@ export default handle(['GET', 'POST'], async (req, res) => {
   await dbg.setMeta('genStatus', { running: true, at: Date.now(), by, cats }).catch(() => {});
   let results;
   const T0 = Date.now();
-  try { results = await Promise.allSettled(cats.map((c, i) => new Promise(r => setTimeout(r, i * 1200)).then(() => generateFor(c, T0, type)))); // dijeda agar tidak menabrak batas per menit }
+  // tiap topik dijeda 1,2 dtk agar tidak menabrak batas per menit Gemini
+  try { results = await Promise.allSettled(cats.map((c, i) => new Promise(r => setTimeout(r, i * 1200)).then(() => generateFor(c, T0, type)))); }
   finally { await dbg.setMeta('genStatus', { running: false, at: Date.now(), by }).catch(() => {}); }
   const summary = results.map((r, i) => r.status === 'fulfilled'
     ? { cat: r.value.cat, saved: r.value.saved, material: r.value.material || 0, reason: r.value.reason || '' }
