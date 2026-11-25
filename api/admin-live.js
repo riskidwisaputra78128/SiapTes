@@ -1,4 +1,4 @@
-// GET /api/admin-live — data Command Center (khusus admin)
+// GET /api/admin-live — data Kantor Live (semua pengguna login)
 import crypto from 'node:crypto';
 import { handle, send, httpError, startOfDayWIB, dayKey } from './_lib/http.js';
 import { requireUser, isAdmin } from './_lib/auth.js';
@@ -10,8 +10,7 @@ const ONLINE_MS = 2.5 * 60 * 1000;
 const key = uid => crypto.createHash('sha1').update(String(uid)).digest('hex').slice(0, 10);
 
 export default handle(['GET'], async (req, res) => {
-  const user = requireUser(req);
-  if (!isAdmin(user)) throw httpError(403, 'Khusus admin');
+  requireUser(req);
   const db = await getDB();
   const now = Date.now(), day0 = startOfDayWIB(now);
 

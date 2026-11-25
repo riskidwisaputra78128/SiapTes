@@ -17,6 +17,7 @@ const NAV = [
   { href: '#/latihan', key: 'latihan', label: 'Latihan', ico: icons.play },
   { href: '#/materi', key: 'materi', label: 'Materi', ico: icons.book },
   { href: '#/duel', key: 'duel', label: 'Duel', ico: icons.swords },
+  { href: '#/kantor', key: 'kantor', label: 'Kantor', ico: icons.building, desktopOnly: true },
   { href: '#/evaluasi', key: 'evaluasi', label: 'Evaluasi', ico: icons.chart },
   { href: '#/peringkat', key: 'peringkat', label: 'Peringkat', ico: icons.trophy, desktopOnly: true },
   { href: '#/teknologi', key: 'teknologi', label: 'Teknologi', ico: icons.chip, desktopOnly: true },
@@ -56,7 +57,7 @@ async function route() {
       case 'teknologi': renderTech(app); break;
       case 'materi': await renderMateri(app, params); break;
       case 'duel': await renderDuel(app, params); break;
-      case 'command': await renderAdminLive(app); break;
+      case 'command': case 'kantor': await renderAdminLive(app); break;
       default: await renderHome();
     }
   } catch (e) {
@@ -293,6 +294,9 @@ async function renderHome() {
     </div>
   </section>
 
+  <section class="section"><a class="glass card row tilt office-card" href="#/kantor" style="gap:14px"><span style="font-size:34px">🏢</span>
+    <div style="flex:1"><b>Kantor Live SiapLolos</b><div class="dim">Lihat kantor 3D: siapa yang sedang latihan, duel, membaca, atau rehat ngopi</div></div><span class="grad-text" style="font-weight:800">Masuk →</span></a></section>
+
   <section class="section"><a class="glass card row tilt" href="#/teknologi" style="gap:14px"><span style="font-size:30px">⚙️</span>
     <div style="flex:1"><b>Teknologi di balik SiapLolos</b><div class="dim">Vercel, GitHub, Firebase, Apps Script, Gemini, dan lainnya</div></div><span class="grad-text" style="font-weight:800">→</span></a></section>`;
 
@@ -366,7 +370,7 @@ function renderProfile() {
     <div class="glass card">
       <h2 class="h2">⚙️ Panel Admin</h2>
       <a class="glass card row tilt" href="#/command" style="gap:14px;margin:12px 0"><span style="font-size:30px">🏢</span>
-        <div style="flex:1"><b>Command Center</b><div class="dim">Visualisasi 3D aktivitas pengguna & sistem secara live</div></div><span class="grad-text" style="font-weight:800">Buka →</span></a>
+        <div style="flex:1"><b>Kantor Live / Command Center</b><div class="dim">Kini bisa dibuka semua pengguna lewat menu 🏢 Kantor</div></div><span class="grad-text" style="font-weight:800">Buka →</span></a>
       <p class="muted" style="margin:6px 0 12px">Buat soal baru dari berita hari ini (Gemini). Otomatis juga berjalan setiap hari pukul 06.00 WIB.</p>
       <div id="sysStatus" class="dim">Memuat status…</div>
       <div class="row wrap" style="margin-top:12px"><button class="btn sm" id="genBtn">✨ Generate soal sekarang</button></div>
@@ -381,6 +385,7 @@ function renderProfile() {
     <label class="glass card row" style="gap:14px;cursor:pointer"><span style="font-size:26px">🟢</span>
       <div style="flex:1"><b>Tampilkan saya di daftar online</b><div class="dim">Matikan jika ingin belajar tanpa terlihat orang lain</div></div>
       <input type="checkbox" id="onlineToggle" class="switch" ${isHidden() ? '' : 'checked'}></label>
+    <a class="btn ghost block" href="#/kantor">🏢 Kantor Live</a>
     <a class="btn ghost block" href="#/peringkat">🏆 Papan peringkat</a>
     <a class="btn ghost block" href="#/teknologi">⚙️ Teknologi di balik SiapLolos</a>
     <button class="btn ghost block" id="logoutBtn">Keluar</button>

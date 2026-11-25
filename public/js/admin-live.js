@@ -16,7 +16,7 @@ const ROOMS = [
     guard: { name: 'Bot Juri', task: n => n ? `memamerkan juara ke ${n} orang` : 'memoles piala' } },
   { key: 'pantry', name: 'Pantry', ico: '☕', x1: 18, x2: 26, row: 'back', door: 22, pages: ['pantry'], verb: 'istirahat ngopi', floor: 'checker',
     guard: { name: 'Bot Barista', task: n => n ? `membuatkan kopi untuk ${n} orang` : 'membersihkan mesin kopi' } },
-  { key: 'beranda', name: 'Lobby', ico: '🏠', x1: -26, x2: -14, row: 'front', door: -16.5, pages: ['beranda'], verb: 'santai di lobby', floor: 'herring',
+  { key: 'beranda', name: 'Lobby', ico: '🏠', x1: -26, x2: -14, row: 'front', door: -16.5, pages: ['beranda', 'kantor', 'command'], verb: 'santai di lobby', floor: 'herring',
     guard: { name: 'Bot Resepsionis', task: n => n ? `menyambut ${n} tamu` : 'siap menyambut' } },
   { key: 'akun', name: 'Pos Akun', ico: '🔐', x1: -14, x2: -8, row: 'front', door: -11, pages: ['profil', 'teknologi', 'login'], verb: 'urus akun', floor: 'tile',
     guard: { name: 'Bot Satpam', task: n => n ? `memeriksa ${n} akun` : 'berjaga di gerbang' } },
@@ -58,8 +58,9 @@ const FY = 0.15; // permukaan lantai
 let themeListener = null;
 
 export async function renderAdminLive(app) {
-  if (!session.user?.admin) {
-    app.innerHTML = `<div class="glass card empty"><div style="font-size:44px">🔒</div><h2 class="h2">Khusus admin</h2><p class="muted">Halaman ini hanya bisa dibuka akun yang terdaftar di ADMIN_EMAILS.</p></div>`;
+  if (!session.loggedIn) {
+    app.innerHTML = `<div class="glass card empty fade-in"><div style="font-size:52px">🏢</div><h2 class="h2">Kantor Live SiapLolos</h2><p class="muted">Lihat siapa saja yang sedang belajar, duel, atau rehat ngopi secara langsung. Masuk dulu untuk melihat kantor.</p><button class="btn" id="toLogin">Daftar / Masuk</button></div>`;
+    $('#toLogin').onclick = () => { session.clear(); location.hash = '#/login'; };
     return;
   }
   if (themeListener) window.removeEventListener('theme:change', themeListener);
@@ -74,7 +75,7 @@ export async function renderAdminLive(app) {
   app.innerHTML = `
   <section class="cc fade-in">
     <div class="row between wrap" style="gap:10px">
-      <div><h1 class="h1" style="margin:0">🏢 SiapLolos Office</h1><p class="muted" style="margin:0">Command Center · aktivitas pengguna & sistem secara langsung · khusus admin</p></div>
+      <div><h1 class="h1" style="margin:0">🏢 SiapLolos Office</h1><p class="muted" style="margin:0">Kantor live · lihat siapa yang sedang belajar, duel, atau rehat ngopi</p></div>
       <div class="row" style="gap:8px">
         <label class="chip" style="cursor:pointer"><input type="checkbox" id="demoChk" ${window.__ccDemo ? 'checked' : ''} style="accent-color:var(--cyan)"> Mode demo</label>
         <span class="chip"><span class="live-dot on"></span> Live · ${NIGHT ? '🌙 malam' : '☀️ siang'}</span>
@@ -91,6 +92,8 @@ export async function renderAdminLive(app) {
         <div class="cc-overlay" id="ccOverlay"></div>
         <div class="cc-hint dim">🖱️ Geser untuk memutar · klik kanan/dua jari untuk geser · scroll/cubit untuk zoom</div>
         <div class="cc-loading" id="ccLoading"><span class="spinner"></span> Membangun kantor…</div>
+        <button class="cc-fs" id="ccFs" title="Layar penuh" aria-label="Layar penuh">⛶</button>
+        <div class="cc-fs-stats" id="ccFsStats"></div>
       </div>
       <aside class="cc-side">
         <div class="glass card" id="ccRoomInfo"></div>
@@ -116,8 +119,10 @@ export async function renderAdminLive(app) {
   const controls = new OrbitControls(cam, canvas);
   Object.assign(controls, { enableDamping: true, minDistance: 8, maxDistance: 140, maxPolarAngle: Math.PI / 2.3, minPolarAngle: Math.PI / 7, screenSpacePanning: false });
   const OVER = { target: new THREE.Vector3(-1.5, 0, -6), dist: SMALL ? 112 : 86 };
+  const overDir = () => { const st = document.getElementById('ccStage'); const a = st ? st.clientWidth / Math.max(1, st.clientHeight) : 1.4;
+    return a < 0.85 ? { dir: new THREE.Vector3(0.95, 1.25, 0.32).normalize(), dist: 62 / Math.max(0.45, a) * 0.82 } : { dir: new THREE.Vector3(-0.42, 0.78, 0.62).normalize(), dist: OVER.dist }; };
   controls.target.copy(OVER.target);
-  cam.position.copy(OVER.target).add(new THREE.Vector3(-0.42, 0.78, 0.62).normalize().multiplyScalar(OVER.dist));
+  { const o = overDir(); cam.position.copy(OVER.target).addScaledVector(o.dir, o.dist); }
 
   scene.add(new THREE.HemisphereLight(S.sky, S.gnd, S.hemi));
   const sun = new THREE.DirectionalLight(NIGHT ? 0x93a5ff : 0xfff4e0, S.sun);
@@ -641,8 +646,8 @@ export async function renderAdminLive(app) {
   let fly = null;
   controls.addEventListener('start', () => (fly = null));
   function flyTo(key) {
-    if (key === 'overview') { fly = { target: OVER.target.clone(), pos: OVER.target.clone().add(new THREE.Vector3(-0.42, 0.78, 0.62).normalize().multiplyScalar(OVER.dist)) }; return; }
-    const r = R[key]; const dist = (Math.max(r.w, r.d) * 1.55 + 7) * (SMALL ? 1.5 : 1);
+    if (key === 'overview') { const o = overDir(); fly = { target: OVER.target.clone(), pos: OVER.target.clone().addScaledVector(o.dir, o.dist) }; return; }
+    const r = R[key]; const portrait = stage.clientWidth < stage.clientHeight * 0.85; const dist = (Math.max(r.w, r.d) * 1.55 + 7) * (portrait ? 1.9 : SMALL ? 1.4 : 1);
     const t = new THREE.Vector3(r.cx, 0.6, r.cz);
     fly = { target: t, pos: t.clone().add(new THREE.Vector3(-0.28, 0.86, 0.43).normalize().multiplyScalar(dist)) };
   }
@@ -656,6 +661,28 @@ export async function renderAdminLive(app) {
     showRoom();
   }
   $$('#ccTabs button').forEach(b => (b.onclick = () => selectRoom(b.dataset.cam, true)));
+  // ───── Layar penuh ─────
+  const tabsEl = $('#ccTabs'), tabsHome = tabsEl.parentNode, tabsNext = tabsEl.nextSibling;
+  const isFull = () => document.fullscreenElement === stage || document.webkitFullscreenElement === stage || stage.classList.contains('cc-full');
+  function enterFull() {
+    stage.prepend(tabsEl); tabsEl.classList.add('in-stage');
+    const req = stage.requestFullscreen || stage.webkitRequestFullscreen;
+    if (req) req.call(stage).catch(() => stage.classList.add('cc-full')); else stage.classList.add('cc-full');
+    if (!req) document.body.style.overflow = 'hidden';
+    $('#ccFs').textContent = '✕'; $('#ccFs').title = 'Keluar layar penuh';
+  }
+  function exitFull() {
+    if (document.fullscreenElement || document.webkitFullscreenElement) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    stage.classList.remove('cc-full'); document.body.style.overflow = '';
+    tabsHome.insertBefore(tabsEl, tabsNext); tabsEl.classList.remove('in-stage');
+    $('#ccFs').textContent = '⛶'; $('#ccFs').title = 'Layar penuh';
+  }
+  $('#ccFs').onclick = () => { isFull() ? exitFull() : enterFull(); setTimeout(() => { if (!selected) flyTo('overview'); }, 350); };
+  const onFsChange = () => { if (!document.fullscreenElement && !document.webkitFullscreenElement && !stage.classList.contains('cc-full') && tabsEl.classList.contains('in-stage')) exitFull(); };
+  document.addEventListener('fullscreenchange', onFsChange); document.addEventListener('webkitfullscreenchange', onFsChange);
+  const onKey = e => { if (e.key === 'Escape' && stage.classList.contains('cc-full')) exitFull(); if (!document.body.contains(stage)) removeEventListener('keydown', onKey); };
+  addEventListener('keydown', onKey);
+  window.addEventListener('hashchange', () => { if (stage.classList.contains('cc-full')) { document.body.style.overflow = ''; } }, { once: true });
   function showRoom() {
     const box2 = $('#ccRoomInfo');
     if (!selected) {
@@ -705,6 +732,7 @@ export async function renderAdminLive(app) {
       ['❓', 'Soal dikerjakan', fmt(t.questions)], ['⚔️', 'Duel aktif', state.duels.filter(d => d.playing).length], ['📚', 'Bank soal', fmt(s.bank)],
       ['📖', 'Materi hari ini', t.materials], ['✨', 'Studio AI', s.generating ? 'bekerja…' : s.ai ? 'siaga' : 'off'],
     ].map(([i, l, val]) => `<div class="glass cc-stat"><span>${i}</span><div><b>${val}</b><small>${l}</small></div></div>`).join('');
+    const fs = $('#ccFsStats'); if (fs) fs.innerHTML = `<span>🟢 ${state.users.length + demo.length} online</span><span>📝 ${t.sessions} sesi</span><span>⚔️ ${state.duels.filter(d => d.playing).length} duel</span><span>📚 ${fmt(s.bank)} soal</span>`;
   }
   $('#demoChk').onchange = () => load();
 

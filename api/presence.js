@@ -6,7 +6,7 @@ import { getUser, requireUser } from './_lib/auth.js';
 import { getDB } from './_lib/db.js';
 
 const ONLINE_MS = 2.5 * 60 * 1000;
-const PAGES = ['beranda', 'latihan', 'quiz', 'hasil', 'materi', 'duel', 'evaluasi', 'peringkat', 'profil', 'teknologi'];
+const PAGES = ['beranda', 'latihan', 'quiz', 'hasil', 'materi', 'duel', 'evaluasi', 'peringkat', 'profil', 'teknologi', 'kantor'];
 
 async function onlineList(db, meUid) {
   const now = Date.now();

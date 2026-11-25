@@ -753,3 +753,18 @@ body { transition: background-color .4s, color .4s; }
 .cc-tabs button { flex: none; padding: 8px 12px; border-radius: 10px; font-weight: 700; font-size: 13px; color: var(--muted); white-space: nowrap; }
 .cc-tabs button.on { background: var(--grad); color: var(--on-accent); }
 button.dp { cursor: pointer; }
+
+/* Kantor: layar penuh */
+.cc-fs { position: absolute; right: 10px; top: 10px; z-index: 5; width: 40px; height: 40px; border-radius: 12px; font-size: 18px; font-weight: 800;
+  background: color-mix(in srgb, var(--glass-strong) 90%, transparent); border: 1px solid var(--line-strong); color: var(--text); box-shadow: var(--shadow); }
+.cc-fs-stats { display: none; }
+.cc-stage:fullscreen, .cc-stage.cc-full { position: fixed; inset: 0; z-index: 1000; width: 100vw; height: 100dvh; max-height: none; min-height: 0; border-radius: 0; border: 0; }
+.cc-stage:-webkit-full-screen { width: 100vw; height: 100vh; border-radius: 0; }
+.cc-stage.cc-full { padding-bottom: env(safe-area-inset-bottom, 0); }
+.cc-tabs.in-stage { position: absolute; left: 10px; right: 60px; top: 10px; z-index: 5; background: color-mix(in srgb, var(--glass-strong) 88%, transparent); backdrop-filter: blur(10px); }
+.cc-stage:fullscreen .cc-fs-stats, .cc-stage.cc-full .cc-fs-stats, .cc-stage:-webkit-full-screen .cc-fs-stats {
+  display: flex; gap: 8px; flex-wrap: wrap; position: absolute; left: 10px; bottom: 34px; z-index: 5; }
+.cc-fs-stats span { padding: 6px 10px; border-radius: 10px; font-size: 12px; font-weight: 700; background: color-mix(in srgb, var(--glass-strong) 88%, transparent); border: 1px solid var(--line); }
+.office-card { background: linear-gradient(135deg, color-mix(in srgb, var(--cyan) 14%, var(--glass)), var(--glass)); }
+.cc-stage:fullscreen .cc-hint, .cc-stage.cc-full .cc-hint, .cc-stage:-webkit-full-screen .cc-hint { display: none; }
+.cc-stage:fullscreen .cc-fs-stats, .cc-stage.cc-full .cc-fs-stats { bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }

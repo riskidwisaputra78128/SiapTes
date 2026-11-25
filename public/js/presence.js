@@ -60,7 +60,8 @@ export function onlineWidget(el) {
         <b>${count} orang sedang online</b>
         ${avatarStack(users)}
         <span class="grad-text" style="margin-left:auto;font-weight:800">Lihat →</span>
-      </button>`;
+      </button>
+      <a class="btn ghost sm block" href="#/kantor" style="margin-top:8px">🏢 Lihat di Kantor Live 3D</a>`;
     $('#onlineOpen', el)?.addEventListener('click', openOnlineList);
   };
   draw();
