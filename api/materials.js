@@ -19,7 +19,11 @@ export default handle(['GET'], async (req, res) => {
     return send(res, 200, { material: m });
   }
   let daily = [];
-  try { daily = await db.listMaterials(50); } catch (e) { console.error('listMaterials', e.message); }
+  try {
+    daily = await db.listMaterials(60);
+    if (daily.some(m => !m.title || !m.category)) db.pruneMaterials(50).catch(() => {}); // bersihkan materi rusak
+    daily = daily.filter(m => m.title && m.category).slice(0, 50);
+  } catch (e) { console.error('listMaterials', e.message); }
   res.setHeader('Cache-Control', 'public, s-maxage=20, stale-while-revalidate=30');
   send(res, 200, { daily: daily.map(brief), core: CORE_MATERIALS.map(brief), max: 50 });
 });
