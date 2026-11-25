@@ -1,0 +1,10 @@
+rules_version = '2';
+// Semua akses data lewat API Vercel (firebase-admin melewati rules ini).
+// Klien langsung ditolak total agar data aman.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

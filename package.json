@@ -1,0 +1,17 @@
+{
+  "name": "siaplolos",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SiapLolos — platform latihan tes OJK, BI, Telkom, CPNS, BUMN (TKD/SKD) dengan 3 mode & soal dari berita terkini",
+  "type": "module",
+  "scripts": {
+    "dev": "node dev-server.js",
+    "build": "echo \"Static frontend di /public, API di /api\""
+  },
+  "dependencies": {
+    "firebase-admin": "^13.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
