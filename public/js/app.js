@@ -6,6 +6,8 @@ import { renderSetup, renderQuiz, renderResult, practice } from './practice.js';
 import { renderStats, renderLeaderboard } from './stats.js';
 import { renderTech } from './tech.js';
 import { renderMateri, getMaterials } from './materi.js';
+import { renderDuel } from './duel.js';
+import { startPresence, onlineWidget, isHidden, setHidden, presence } from './presence.js';
 import { applyTheme, currentTheme, openThemePicker, THEMES } from './theme.js';
 
 const app = $('#app');
@@ -13,8 +15,9 @@ const NAV = [
   { href: '#/', key: '', label: 'Beranda', ico: icons.home },
   { href: '#/latihan', key: 'latihan', label: 'Latihan', ico: icons.play },
   { href: '#/materi', key: 'materi', label: 'Materi', ico: icons.book },
+  { href: '#/duel', key: 'duel', label: 'Duel', ico: icons.swords },
   { href: '#/evaluasi', key: 'evaluasi', label: 'Evaluasi', ico: icons.chart },
-  { href: '#/peringkat', key: 'peringkat', label: 'Peringkat', ico: icons.trophy },
+  { href: '#/peringkat', key: 'peringkat', label: 'Peringkat', ico: icons.trophy, desktopOnly: true },
   { href: '#/teknologi', key: 'teknologi', label: 'Teknologi', ico: icons.chip, desktopOnly: true },
   { href: '#/profil', key: 'profil', label: 'Profil', ico: icons.user },
 ];
@@ -51,6 +54,7 @@ async function route() {
       case 'profil': renderProfile(); break;
       case 'teknologi': renderTech(app); break;
       case 'materi': await renderMateri(app, params); break;
+      case 'duel': await renderDuel(app, params); break;
       default: await renderHome();
     }
   } catch (e) {
@@ -230,7 +234,7 @@ async function renderHome() {
       <p class="dim" style="margin:0">${greet} 👋</p>
       <h1 class="h1">${u ? esc(u.name.split(' ')[0]) : 'Tamu'}, siap latihan hari ini?</h1>
       <p class="muted" style="margin:0 0 16px">${u?.target ? `Target: <b style="color:var(--text)">${esc(u.target)}</b> · ` : ''}Konsisten 15 menit sehari lebih baik dari 3 jam sekali seminggu.</p>
-      <div class="row wrap"><a class="btn" href="#/latihan">🚀 Mulai Latihan</a><a class="btn ghost" href="#/latihan?mode=game&category=campuran&difficulty=normal">🎮 Arena Cepat</a></div>
+      <div class="row wrap"><a class="btn" href="#/latihan">🚀 Mulai Latihan</a><a class="btn ghost" href="#/latihan?mode=game&category=campuran&difficulty=normal">🎮 Arena Cepat</a><a class="btn ghost" href="#/duel">⚔️ Duel</a></div>
     </div>
     <div class="glass card" id="levelCard">
       ${session.loggedIn ? '<div class="skeleton" style="height:120px"></div>' : `
@@ -238,6 +242,8 @@ async function renderHome() {
         <button class="btn sm" id="toLogin">Daftar / Masuk</button>`}
     </div>
   </section>
+
+  <section class="section" id="onlineBox" hidden></section>
 
   <section class="section" id="todayStats" ${session.loggedIn ? '' : 'hidden'}>
     <div class="grid g4">
@@ -289,6 +295,7 @@ async function renderHome() {
     <div style="flex:1"><b>Teknologi di balik SiapLolos</b><div class="dim">Vercel, GitHub, Firebase, Apps Script, Gemini, dan lainnya</div></div><span class="grad-text" style="font-weight:800">→</span></a></section>`;
 
   $('#toLogin')?.addEventListener('click', () => { session.clear(); location.hash = '#/login'; });
+  onlineWidget($('#onlineBox'));
 
   getMaterials().then(d => {
     const el = $('#matStrip'); if (!el) return;
@@ -367,10 +374,15 @@ function renderProfile() {
     </div>
     <button class="glass card row tilt" id="profTheme" style="gap:14px;text-align:left;width:100%"><span style="font-size:28px">🎨</span>
       <div style="flex:1"><b>Tema tampilan</b><div class="dim" id="profThemeName"></div></div><span class="grad-text" style="font-weight:800">Ganti →</span></button>
+    <label class="glass card row" style="gap:14px;cursor:pointer"><span style="font-size:26px">🟢</span>
+      <div style="flex:1"><b>Tampilkan saya di daftar online</b><div class="dim">Matikan jika ingin belajar tanpa terlihat orang lain</div></div>
+      <input type="checkbox" id="onlineToggle" class="switch" ${isHidden() ? '' : 'checked'}></label>
+    <a class="btn ghost block" href="#/peringkat">🏆 Papan peringkat</a>
     <a class="btn ghost block" href="#/teknologi">⚙️ Teknologi di balik SiapLolos</a>
     <button class="btn ghost block" id="logoutBtn">Keluar</button>
   </section>`;
   const tn = () => { const t = THEMES.find(x => x.key === currentTheme()); $('#profThemeName') && ($('#profThemeName').textContent = `${t.ico} ${t.name} — ${t.desc}`); };
+  $('#onlineToggle').onchange = e => { setHidden(!e.target.checked); toast(e.target.checked ? 'Kamu terlihat online' : 'Status online disembunyikan', 'ok'); };
   tn(); $('#profTheme').onclick = openThemePicker; window.addEventListener('theme:change', tn);
   $('#logoutBtn').onclick = () => { session.clear(); toast('Kamu telah keluar'); location.hash = '#/login'; };
   api('/stats').then(s => {
@@ -400,6 +412,8 @@ window.addEventListener('auth:expired', () => { toast('Sesi berakhir, silakan ma
 window.addEventListener('beforeunload', e => { if (practice.active) { e.preventDefault(); e.returnValue = ''; } });
 
 applyTheme(currentTheme(), { save: false });
+if (session.loggedIn) startPresence();
+window.addEventListener('hashchange', () => { if (session.loggedIn) startPresence(); });
 $('#themeBtn').onclick = openThemePicker;
 route();
 initBackground($('#bg3d'));

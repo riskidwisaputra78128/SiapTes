@@ -41,6 +41,7 @@ export async function renderStats(app) {
     <div class="row between wrap">
       <div><h1 class="h1">Evaluasi belajar</h1><p class="muted" style="margin:0">Pantau perkembanganmu per hari, minggu, dan bulan.</p></div>
       <div class="glass row" style="padding:10px 14px;border-radius:16px"><span class="flame" style="font-size:24px">🔥</span><b style="font-family:var(--num);font-size:20px">${s.streak}</b><span class="dim">hari beruntun</span></div>
+      <a class="btn ghost sm" href="#/peringkat">🏆 Peringkat</a>
     </div>
     <div class="grid md-g3">${sumTile('Hari ini', s.summary.today, '☀️')}${sumTile('Minggu ini', s.summary.week, '📅')}${sumTile('Bulan ini', s.summary.month, '🗓️')}</div>
 
@@ -69,7 +70,7 @@ export async function renderStats(app) {
         ${s.byDifficulty.map(d => `<div class="bar-row" style="grid-template-columns:70px 1fr 44px"><span class="chip ${d.key}" style="justify-self:start">${d.name}</span>
           <div class="track"><i style="width:0;background:${accColor(d.accuracy)}" data-w="${d.questions ? d.accuracy : 0}"></i></div><span class="pct">${d.questions ? d.accuracy + '%' : '–'}</span></div>`).join('')}
         <h3 class="h2" style="font-size:16px;margin:18px 0 10px">Per mode</h3>
-        <div class="grid g4" style="gap:8px">${['pg', 'game', 'essay', 'interaktif'].map(k => { const m = s.byMode.find(x => x.key === k); return `
+        <div class="grid g4" style="gap:8px">${['pg', 'game', 'essay', 'interaktif', 'duel'].map(k => { const m = s.byMode.find(x => x.key === k); return `
           <div class="glass stat" style="padding:10px"><div style="font-size:20px">${modeByKey[k].ico}</div><div style="font-family:var(--num);font-weight:700">${m ? m.sessions : 0} sesi</div><div class="dim">${m ? m.avgScore + ' rata-rata' : 'belum'}</div></div>`; }).join('')}</div>
       </div>
     </div>
