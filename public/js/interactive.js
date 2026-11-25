@@ -49,7 +49,6 @@ export function runInteractive(app, practice, { complete, metaHTML, srcHTML, con
         ${metaHTML(q, st.i, n)}
         <div class="kind-tag">${k.ico} ${k.name}</div>
         <p class="q-text">${esc(q.question)}</p>
-        ${srcHTML(q)}
         <p class="dim" style="margin:8px 0 0">💡 ${k.hint}</p>
         <div id="stage" class="ix-stage"></div>
         <div class="row" style="margin-top:14px;gap:10px">
@@ -75,6 +74,7 @@ export function runInteractive(app, practice, { complete, metaHTML, srcHTML, con
           <b>${ok ? '✅ Sempurna!' : res.ratio >= 0.5 ? `◐ Hampir! ${Math.round(res.ratio * 100)}% tepat` : `❌ Baru ${Math.round(res.ratio * 100)}% tepat`}</b>
           ${!ok && res.correctView ? `<div style="margin-top:8px">${res.correctView}</div>` : ''}
           ${q.explanation ? `<div class="muted" style="margin-top:6px">${esc(q.explanation)}</div>` : ''}
+          ${srcHTML(q)}
         </div>
         <button class="btn block" id="nextBtn" style="margin-top:12px">${last ? '🏁 Lihat hasil' : 'Soal berikutnya →'}</button>`;
       $('#nextBtn').onclick = () => { if (last) finish(); else { st.i++; draw(); window.scrollTo({ top: 0, behavior: 'smooth' }); } };

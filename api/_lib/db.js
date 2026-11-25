@@ -53,6 +53,18 @@ function firestoreBackend(fs) {
       }
       return n;
     },
+    async listQuestionIds(category) {
+      const snap = await Q.where('category', '==', category).select().get();
+      return snap.docs.map(d => d.id);
+    },
+    async deleteQuestions(ids) {
+      let n = 0;
+      for (let i = 0; i < ids.length; i += 400) {
+        const batch = fs.batch(); ids.slice(i, i + 400).forEach(id => { batch.delete(Q.doc(id)); n++; });
+        await batch.commit();
+      }
+      return n;
+    },
     async listQuestions({ category, type }) {
       let ref = category && category !== 'campuran' ? Q.where('category', '==', category) : Q.orderBy('createdAt', 'desc');
       const snap = await ref.limit(600).get();
@@ -143,6 +155,8 @@ function memoryBackend() {
     async listQuestions({ category, type }) {
       return [...g.q.values()].filter(q => (!category || category === 'campuran' || q.category === category) && (!type || q.type === type));
     },
+    async listQuestionIds(category) { return [...g.q.values()].filter(q => q.category === category).map(q => q.id); },
+    async deleteQuestions(ids) { let n = 0; ids.forEach(id => { if (g.q.delete(id)) n++; }); return n; },
     async countQuestions({ category, sinceMs } = {}) {
       return [...g.q.values()].filter(q => (!category || q.category === category) && (!sinceMs || q.createdAt >= sinceMs)).length;
     },

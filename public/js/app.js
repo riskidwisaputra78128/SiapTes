@@ -534,6 +534,13 @@ function renderProfile() {
       <p class="dim" style="margin:8px 0 0">💡 Jalankan satu per satu, beri jeda ±1 menit agar kuota Gemini tidak cepat habis.</p>
       <pre id="genOut" class="dim" style="white-space:pre-wrap;margin:12px 0 0"></pre><div id="genLinks"></div>
     </div>
+    <div class="glass card">
+      <h2 class="h2">🧹 Hapus soal massal</h2>
+      <p class="muted" style="margin:6px 0 10px">Hapus 100–200 soal hasil generate secara acak. Topik dengan soal <b>paling banyak</b> akan paling banyak dikurangi, agar jumlah soal antar topik lebih seimbang. Soal bawaan (inti) tidak ikut terhapus.</p>
+      <div class="row" style="gap:12px;align-items:center"><input type="range" id="purgeN" min="100" max="200" step="10" value="100" style="flex:1;accent-color:var(--cyan)"><b id="purgeNT" style="font-family:var(--num);min-width:72px;text-align:right">100 soal</b></div>
+      <div class="row wrap" style="gap:8px;margin-top:10px"><button class="btn ghost sm" id="purgePlan">👀 Lihat rencana</button><button class="btn danger sm" id="purgeGo">🗑️ Hapus soal</button></div>
+      <div id="purgeOut" style="margin-top:10px"></div>
+    </div>
     <div class="glass card"><div class="row between"><h2 class="h2">💬 Kritik & Saran</h2><span class="chip" id="fbUnread">…</span></div>
       <p class="dim" style="margin:4px 0 10px">Pesan dari pengguna. Salinannya juga masuk ke Google Sheet, tab "Kritik &amp; Saran".</p>
       <div id="fbList"><div class="skeleton" style="height:80px"></div></div></div>` : ''}
@@ -588,6 +595,35 @@ function renderProfile() {
       $$('[data-fb]').forEach(b => (b.onclick = async () => { b.disabled = true; await api('/presence?op=feedback', { method: 'POST', body: { action: 'done', id: b.dataset.fb, done: b.dataset.done === '1' } }).catch(e => toast(e.message, 'err')); loadFb(); }));
     }).catch(e => { $('#fbList').innerHTML = `<div class="empty">${esc(e.message)}</div>`; });
     loadFb();
+    // ── Hapus soal massal ──
+    const pN = () => +$('#purgeN').value;
+    $('#purgeN').oninput = () => { $('#purgeNT').textContent = pN() + ' soal'; $('#purgeOut').innerHTML = ''; };
+    const planTable = d => { const mx = Math.max(1, ...d.plan.map(x => x.before)); return `<div class="purge-plan">${d.plan.map(p => `<div class="pp-row"><span>${catByKey[p.cat]?.ico || ''} ${esc(catByKey[p.cat]?.name || p.cat)}</span>
+        <span class="pp-bar"><i style="width:${Math.round(p.after / mx * 100)}%"></i><i class="rm" style="width:${Math.round(p.remove / mx * 100)}%"></i></span>
+        <b>${fmt(p.before)} → ${fmt(p.after)}</b>${p.remove ? `<span class="pp-rm">−${p.remove}</span>` : '<span class="pp-rm z">0</span>'}</div>`).join('')}</div>`; };
+    const getPlan = () => api('/questions', { method: 'POST', body: { action: 'purge', count: pN(), dry: true } });
+    $('#purgePlan').onclick = async () => {
+      $('#purgeOut').innerHTML = '<div class="skeleton" style="height:120px"></div>';
+      try { const d = await getPlan(); $('#purgeOut').innerHTML = `<p class="dim" style="margin:0 0 6px">${d.count} dari ${fmt(d.total)} soal hasil generate akan dihapus:</p>${planTable(d)}`; }
+      catch (e) { $('#purgeOut').innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+    };
+    $('#purgeGo').onclick = async () => {
+      let d; try { d = await getPlan(); } catch (e) { return toast(e.message, 'err'); }
+      if (!d.count) return toast('Belum ada soal hasil generate untuk dihapus', 'err');
+      sheet(`<h3 class="h2">🗑️ Hapus ${d.count} soal?</h3><p class="dim" style="margin:6px 0 10px">Dihapus permanen secara acak dari database dan tidak bisa dikembalikan.</p>${planTable(d)}
+        <div class="row" style="gap:8px;margin-top:14px"><button class="btn ghost" id="pNo" style="flex:1">Batal</button><button class="btn danger" id="pYes" style="flex:1">Hapus permanen</button></div>`,
+      (el, close) => {
+        $('#pNo', el).onclick = close;
+        $('#pYes', el).onclick = async () => {
+          const b = $('#pYes', el); b.disabled = true; b.innerHTML = '<span class="spinner"></span> Menghapus…';
+          try {
+            const r = await api('/questions', { method: 'POST', body: { action: 'purge', count: d.count } });
+            close(); toast(`${r.removed} soal dihapus · sisa ${fmt(r.total)} soal hasil generate`, 'ok');
+            $('#purgeOut').innerHTML = `<p class="dim" style="margin:0 0 6px">✅ ${r.removed} soal terhapus.</p>${planTable(r)}`; loadStatus();
+          } catch (e) { toast(e.message, 'err'); b.disabled = false; b.textContent = 'Hapus permanen'; }
+        };
+      });
+    };
     // pilihan topik (maks 4 per generate, agar muat dalam batas waktu server ±60 dtk)
     const NEWS = ['isu', 'twk', 'ojk', 'bi', 'bumn', 'telkom', 'keuangan'];
     let pickCats = (() => { try { return JSON.parse(localStorage.getItem('sl_gen_cats') || '[]'); } catch { return []; } })();

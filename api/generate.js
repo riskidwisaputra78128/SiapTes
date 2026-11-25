@@ -197,15 +197,19 @@ Berikut judul berita terbaru (index: judul — media):
 ${headlines.map((h, i) => `${i}: ${h.title} — ${h.source}`).join('\n')}
 
 Buat 10 soal: 6 pilihan ganda (type "pg"), 2 esai (type "essay"), dan 2 soal interaktif (type "interactive").
+TUJUAN UTAMA: melatih pengetahuan yang benar-benar diujikan, BUKAN kuis berita.
+Komposisi:
+- 7 soal PENGETAHUAN INTI topik ini: dasar hukum/undang-undang, tugas & wewenang lembaga, konsep & istilah ekonomi/keuangan, prinsip, mekanisme, sejarah singkat, angka/ketentuan resmi yang mapan. Soal ini tetap benar walau dibaca setahun lagi. Isi "sourceIndex": -1.
+- 3 soal KONTEKS TERKINI: memakai salah satu judul berita di atas sebagai pemicu, tetapi yang diuji tetap konsepnya (mis. "Jika BI menaikkan suku bunga acuan, dampak yang paling mungkin terhadap…"). Isi "sourceIndex" dengan index beritanya.
 Aturan:
-- Dasarkan soal pada fakta yang JELAS dari judul berita di atas, digabung pengetahuan umum yang mapan (dasar hukum, fungsi lembaga, konsep ekonomi). Jangan mengarang angka/tanggal yang tidak ada di judul.
+- Kalimat soal harus BERDIRI SENDIRI: jangan menulis "menurut berita", "berdasarkan artikel", "dalam berita tersebut", nama media, atau tanggal berita. Konteks berita boleh disebut di "explanation".
+- Jangan mengarang angka/tanggal yang tidak ada di judul berita atau bukan pengetahuan resmi yang mapan.
 - Sebar tingkat kesulitan: easy, normal, hard, prof (prof = analisis/studi kasus tingkat lanjut).
 - Pilihan ganda: tepat 4 opsi tanpa huruf di depan, satu jawaban benar, opsi pengecoh masuk akal, JANGAN pakai opsi "semua benar"/"semua salah".
-- "explanation": 1-3 kalimat kenapa jawaban benar, sebut konteks beritanya.
+- "explanation": 1-3 kalimat kenapa jawaban benar (sebut dasar hukum/konsepnya; untuk soal konteks terkini boleh sebut beritanya).
 - Esai: pertanyaan analitis, beri "keyPoints" (3-5 poin kunci) dan "modelAnswer" (4-6 kalimat).
-- Interaktif #1 kind "match": 4 pasangan {"a","b"} yang saling cocok (mis. lembaga ↔ peran, istilah ↔ arti) terkait topik/berita; setiap "b" harus unik.
+- Interaktif #1 kind "match": 4 pasangan {"a","b"} yang saling cocok (mis. lembaga ↔ peran, istilah ↔ arti); setiap "b" harus unik.
 - Interaktif #2 kind "order": 4-6 langkah/kronologi/proses dalam URUTAN YANG BENAR di "items" (mis. alur kebijakan, tahapan proses), yang urutannya jelas dan tidak ambigu.
-- "sourceIndex": index berita yang menjadi dasar soal.
 Format JSON:
 {"questions":[{"type":"pg","difficulty":"normal","question":"...","options":["...","...","...","..."],"answer":0,"explanation":"...","sourceIndex":0},
 {"type":"essay","difficulty":"hard","question":"...","keyPoints":["..."],"modelAnswer":"...","explanation":"...","sourceIndex":1},

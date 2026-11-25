@@ -26,7 +26,7 @@ function every(ms, el, fn) {
 }
 function srcHTML(q) {
   if (!q.source) return '';
-  return `<div class="q-source">📰 <span>Berdasarkan berita: <a href="${esc(q.source.link)}" target="_blank" rel="noopener">${esc(q.source.title)}</a>${q.source.publisher ? ' — ' + esc(q.source.publisher) : ''}</span></div>`;
+  return `<div class="q-source">📰 <span>Konteks berita: <a href="${esc(q.source.link)}" target="_blank" rel="noopener">${esc(q.source.title)}</a>${q.source.publisher ? ' — ' + esc(q.source.publisher) : ''}</span></div>`;
 }
 function metaHTML(q, i, n) {
   return `<div class="q-meta"><span class="chip">Soal ${i + 1}/${n}</span><span class="chip">${catByKey[q.category]?.ico || ''} ${esc(catByKey[q.category]?.name || q.category)}</span>
@@ -168,7 +168,6 @@ function runPG(app) {
       <div class="glass q-card fade-in">
         ${metaHTML(q, st.i, n)}
         <p class="q-text">${esc(q.question)}</p>
-        ${srcHTML(q)}
         <div class="opts">${q.options.map((o, k) => `
           <button class="opt ${st.ans[st.i] === k ? 'sel' : ''}" data-k="${k}"><span class="key">${L[k]}</span><span>${esc(o)}</span></button>`).join('')}</div>
       </div>
@@ -381,7 +380,6 @@ function runEssay(app) {
       <div class="glass q-card fade-in">
         ${metaHTML(q, st.i, n)}
         <p class="q-text">${esc(q.question)}</p>
-        ${srcHTML(q)}
         <div class="field" style="margin-top:16px">
           <label for="essay">Jawabanmu</label>
           <textarea id="essay" class="input" placeholder="Tulis jawaban dengan kata-katamu sendiri. Tidak harus sama persis — yang dinilai adalah maksud dan poin pentingnya.">${esc(st.drafts[st.i])}</textarea>
@@ -424,6 +422,7 @@ function runEssay(app) {
         </div>
         ${g.covered?.length ? `<div><b>Poin yang sudah tepat</b><ul class="points-list">${g.covered.map(c => `<li><span class="ok">✓</span>${esc(c)}</li>`).join('')}</ul></div>` : ''}
         ${g.missed?.length ? `<div><b>Poin yang terlewat</b><ul class="points-list">${g.missed.map(c => `<li><span class="no">✗</span>${esc(c)}</li>`).join('')}</ul></div>` : ''}
+        ${srcHTML(q)}
         ${g.corrections?.length && g.engine === 'ai' ? `<div><b>Koreksi</b><div class="stack" style="gap:8px;margin-top:6px">${g.corrections.map(c => `<div class="corr"><s>${esc(c.issue)}</s><br>→ <b>${esc(c.fix)}</b></div>`).join('')}</div></div>` : ''}
         <details class="model" ${g.score < 60 ? 'open' : ''}><summary>${g.engine === 'ai' ? 'Versi jawabanmu yang diperbaiki' : 'Jawaban acuan'}</summary><p>${esc(g.improved || q.modelAnswer)}</p></details>
         ${g.engine === 'ai' && q.modelAnswer ? `<details class="model"><summary>Jawaban acuan</summary><p>${esc(q.modelAnswer)}</p></details>` : ''}
