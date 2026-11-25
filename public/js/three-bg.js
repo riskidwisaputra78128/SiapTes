@@ -7,6 +7,7 @@ const PALETTES = {
   pro: { colors: [0x1e3a8a, 0x3b82f6, 0x94a3b8, 0xcbd5e1, 0xb7791f], fog: 0xf5f6f8, fogD: 0.04, star: 0x1e3a8a, starO: 0.2, em: 0.05, wire: 0.2 },
 };
 const themeKey = () => document.documentElement.getAttribute('data-theme') || 'dark';
+const fx = () => document.documentElement.dataset.fx || 'full';
 
 export async function initBackground(canvas) {
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -17,7 +18,8 @@ export async function initBackground(canvas) {
   try {
     renderer = new THREE.WebGLRenderer({ canvas, antialias: !small, alpha: true, powerPreference: 'low-power' });
   } catch { return; }
-  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, small ? 1.25 : 1.75));
+  const setPR = () => renderer.setPixelRatio(fx() === 'full' ? Math.min(devicePixelRatio || 1, small ? 1.25 : 1.75) : 1);
+  setPR();
   renderer.setSize(innerWidth, innerHeight, false);
 
   const scene = new THREE.Scene();
@@ -38,7 +40,7 @@ export async function initBackground(canvas) {
   const palette = pal.colors;
   scene.fog.color.set(pal.fog); scene.fog.density = pal.fogD;
   const group = new THREE.Group(); scene.add(group);
-  const count = small ? 9 : 16;
+  const count = small || fx() !== 'full' ? 9 : 16;
   const items = [];
   for (let i = 0; i < count; i++) {
     const color = palette[i % palette.length];
@@ -55,7 +57,7 @@ export async function initBackground(canvas) {
     group.add(mesh); items.push(mesh);
   }
 
-  const pCount = small ? 260 : 600;
+  const pCount = small || fx() !== 'full' ? 220 : 600;
   const pos = new Float32Array(pCount * 3);
   for (let i = 0; i < pCount; i++) { pos[i * 3] = (Math.random() - 0.5) * 40; pos[i * 3 + 1] = (Math.random() - 0.5) * 26; pos[i * 3 + 2] = -Math.random() * 20; }
   const pg = new THREE.BufferGeometry(); pg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
@@ -85,8 +87,15 @@ export async function initBackground(canvas) {
   window.addEventListener('bg:burst', () => { burst = 1; });
 
   const clock = new THREE.Clock();
+  let lastT = 0;
+  window.addEventListener('fx:change', () => { setPR(); renderer.setSize(innerWidth, innerHeight, false); lastT = 0; if (running) loop(); });
   function loop() {
     if (!running) return;
+    // Hemat: ±30 fps · Mati: render sekali lalu berhenti
+    const nowT = performance.now(), lvl = fx();
+    if (lvl === 'off' && lastT) return;
+    if (lvl === 'lite' && nowT - lastT < 33) { requestAnimationFrame(loop); return; }
+    lastT = nowT;
     if (window.__bgPause || ['senja', 'fajar', 'malam', 'pagi', 'sakura'].includes(document.documentElement.getAttribute('data-theme'))) { setTimeout(() => requestAnimationFrame(loop), 600); return; } // halaman 3D lain sedang aktif
     const t = clock.getElapsedTime();
     mx += (tx - mx) * 0.04; my += (ty - my) * 0.04;

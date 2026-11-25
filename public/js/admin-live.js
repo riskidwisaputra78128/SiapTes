@@ -110,9 +110,10 @@ export async function renderAdminLive(app) {
 
   /* ───── Renderer, kamera, cahaya ───── */
   const stage = $('#ccStage'), canvas = $('#ccCanvas'), overlay = $('#ccOverlay');
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  const FXL = document.documentElement.dataset.fx || 'full', LITE = FXL !== 'full';
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: !LITE && !SMALL, alpha: true, powerPreference: LITE ? 'low-power' : 'default' });
   // Mode ringan: resolusi dibatasi, bayangan sederhana & tidak dihitung tiap frame
-  let pr = Math.min(devicePixelRatio || 1, 1.25);
+  let pr = LITE ? (SMALL ? 0.85 : 1) : Math.min(devicePixelRatio || 1, 1.25);
   renderer.setPixelRatio(pr);
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap; renderer.shadowMap.autoUpdate = false;
   window.__bgPause = true; // jeda background 3D beranda selama di kantor
@@ -129,7 +130,7 @@ export async function renderAdminLive(app) {
 
   scene.add(new THREE.HemisphereLight(S.sky, S.gnd, NIGHT ? S.hemi * 1.45 : S.hemi));
   const sun = new THREE.DirectionalLight(NIGHT ? 0x93a5ff : 0xfff4e0, S.sun);
-  sun.position.set(-22, 40, 26); sun.castShadow = true; sun.shadow.mapSize.set(SMALL ? 512 : 1024, SMALL ? 512 : 1024);
+  sun.position.set(-22, 40, 26); sun.castShadow = !LITE; sun.shadow.mapSize.set(SMALL ? 512 : 1024, SMALL ? 512 : 1024);
   Object.assign(sun.shadow.camera, { left: -34, right: 34, top: 30, bottom: -30, far: 140 }); sun.shadow.bias = -0.0004;
   scene.add(sun);
 
@@ -900,14 +901,16 @@ export async function renderAdminLive(app) {
   const swing = (ud, amt, speed, t) => { const s = Math.sin(t * speed + ud.phase) * amt; ud.legL.rotation.x = s; ud.legR.rotation.x = -s; ud.armL.rotation.x = -s; ud.armR.rotation.x = s; };
   const ease = (o, k, v) => (o.rotation.x += (v - o.rotation.x) * k);
 
-  let onScreen = true, slow = 0, frames = 0, shadowT = 0;
+  let onScreen = true, slow = 0, frames = 0, shadowT = 0, lastF = 0;
   new IntersectionObserver(es => (onScreen = es[0].isIntersecting)).observe(stage);
   function frame() {
     if (!document.body.contains(stage)) { renderer.dispose(); window.__bgPause = false; return; }
     if (!onScreen || document.hidden) { clock.getDelta(); setTimeout(() => requestAnimationFrame(frame), 250); return; }
+    if (LITE && performance.now() - lastF < 32) { requestAnimationFrame(frame); return; }   // mode hemat: ±30 fps
+    lastF = performance.now();
     const raw = clock.getDelta(), dt = Math.min(raw, 0.1), t = clock.elapsedTime, busy = state.system.generating;
     // kualitas adaptif: bila FPS < ~40, turunkan resolusi lalu matikan bayangan
-    if (++frames > 30) { slow = slow * 0.9 + (raw > 0.026 ? 1 : 0) * 0.1; if (frames > 90 && slow > 0.6) {
+    if (++frames > 30) { slow = slow * 0.9 + (raw > (LITE ? 0.05 : 0.026) ? 1 : 0) * 0.1; if (frames > 90 && slow > 0.6) {
       frames = 31; slow = 0;
       if (pr > 1) { pr = 1; renderer.setPixelRatio(pr); resize(); }
       else if (pr > 0.8) { pr = 0.8; renderer.setPixelRatio(pr); resize(); }

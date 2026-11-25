@@ -1082,3 +1082,25 @@ html.cc-lock, html.cc-lock body { overflow: hidden !important; overscroll-behavi
 .cc-stage.cc-full .cc-fs { top: calc(10px + env(safe-area-inset-top, 0px)); right: calc(10px + env(safe-area-inset-right, 0px)); width: 44px; height: 44px; }
 .cc-stage.cc-full .cc-tabs.in-stage { top: calc(10px + env(safe-area-inset-top, 0px)); left: calc(10px + env(safe-area-inset-left, 0px)); }
 html.cc-lock .dock, html.cc-lock .bottomnav, html.cc-lock .topbar { display: none !important; }
+
+/* ───── Mode animasi Hemat / Mati (otomatis Hemat di HP) ─────
+   backdrop-filter (efek kaca) adalah penyebab lag terbesar di HP → diganti panel solid. */
+:is([data-fx="lite"], [data-fx="off"]) * { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+:is([data-fx="lite"], [data-fx="off"]) .glass { background: color-mix(in srgb, var(--glass-strong) 94%, transparent); box-shadow: 0 10px 28px -18px rgba(0,0,0,.55); }
+:is([data-fx="lite"], [data-fx="off"]) .topbar { background: color-mix(in srgb, var(--glass-strong) 96%, transparent); }
+:is([data-fx="lite"], [data-fx="off"]) .bottomnav, :is([data-fx="lite"], [data-fx="off"]) .sheet { background: var(--glass-strong); }
+:is([data-fx="lite"], [data-fx="off"]) .dock-btn { background: var(--glass-strong); }
+:is([data-fx="lite"], [data-fx="off"]) #scene .sc-kb { animation: none !important; }
+:is([data-fx="lite"], [data-fx="off"]) #scene .sc-fog { animation: none !important; filter: blur(18px); }
+:is([data-fx="lite"], [data-fx="off"]) body.sc-dim #scene .sc-kb { filter: brightness(.7) saturate(1.05); }
+:is([data-fx="lite"], [data-fx="off"]) body.sc-dim #scene[data-scene="pagi"] .sc-kb, :is([data-fx="lite"], [data-fx="off"]) body.sc-dim #scene[data-scene="sakura"] .sc-kb { filter: brightness(1.04); }
+:is([data-fx="lite"], [data-fx="off"]) .tilt { transform: none !important; }
+:is([data-fx="lite"], [data-fx="off"]) .cat-card.has-img:hover .cat-img img, :is([data-fx="lite"], [data-fx="off"]) .mat-card:hover .mat-cover img { transform: none; }
+[data-fx="off"] #scene .sc-fog, [data-fx="off"] #scene .sc-fx { display: none; }
+[data-fx="off"] :is(.flame, .brand-gem, .cc-emo, #fbBtn, .mm-new, .eq i, .flow-arrow) { animation: none !important; }
+[data-fx="off"] .cat-card.has-img { animation: none; }
+/* tanpa blur, bilah navigasi & panel harus padat agar teks di belakangnya tidak tembus */
+:is([data-fx="lite"], [data-fx="off"]) .topbar, :is([data-fx="lite"], [data-fx="off"]) .bottomnav,
+:is([data-fx="lite"], [data-fx="off"]) .sheet, :is([data-fx="lite"], [data-fx="off"]) .dock-btn:not(#fbBtn),
+:is([data-fx="lite"], [data-fx="off"]) .toast { background: linear-gradient(var(--glass-strong), var(--glass-strong)), var(--bg) !important; }
+:is([data-fx="lite"], [data-fx="off"]) .glass { background: color-mix(in srgb, var(--glass-strong) 88%, transparent); }

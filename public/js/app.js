@@ -1,3 +1,4 @@
+import { FX_LEVELS, fxChoice, setFx, autoFx } from './perf.js';
 import { api, session, getInfo } from './api.js';
 import { $, $$, esc, toast, bindTilt, icons, fmt, timeAgo, countUp, avatar, sheet } from './ui.js';
 import { CATEGORIES, TARGETS, catByKey } from './data.js';
@@ -542,6 +543,11 @@ function renderProfile() {
     </div>
     <button class="glass card row tilt" id="profTheme" style="gap:14px;text-align:left;width:100%"><span style="font-size:28px">🎨</span>
       <div style="flex:1"><b>Tema tampilan</b><div class="dim" id="profThemeName"></div></div><span class="grad-text" style="font-weight:800">Ganti →</span></button>
+    <div class="glass card"><div class="row" style="gap:14px"><span style="font-size:26px">✨</span>
+      <div style="flex:1"><b>Animasi latar</b><div class="dim">Pilih Hemat bila terasa lag di HP. Otomatis: <span id="fxAutoName"></span></div></div></div>
+      <div class="pill-group" id="fxPick" style="margin-top:10px">
+        <button class="pill" data-fx="auto">🤖 Otomatis</button>${FX_LEVELS.map(f => `<button class="pill" data-fx="${f.key}" title="${f.desc}">${{ full: '🚀', lite: '🍃', off: '⏸️' }[f.key]} ${f.name}</button>`).join('')}
+      </div></div>
     <label class="glass card row" style="gap:14px;cursor:pointer"><span style="font-size:26px">🟢</span>
       <div style="flex:1"><b>Tampilkan saya di daftar online</b><div class="dim">Matikan jika ingin belajar tanpa terlihat orang lain</div></div>
       <input type="checkbox" id="onlineToggle" class="switch" ${isHidden() ? '' : 'checked'}></label>
@@ -554,6 +560,9 @@ function renderProfile() {
   $('#onlineToggle').onchange = e => { setHidden(!e.target.checked); toast(e.target.checked ? 'Kamu terlihat online' : 'Status online disembunyikan', 'ok'); };
   tn(); $('#profTheme').onclick = openThemePicker; window.addEventListener('theme:change', tn);
   bindPhoto();
+  const paintFx = () => { $$('#fxPick [data-fx]').forEach(b => b.classList.toggle('on', b.dataset.fx === fxChoice())); const a = $('#fxAutoName'); if (a) a.textContent = FX_LEVELS.find(f => f.key === autoFx()).name; };
+  $$('#fxPick [data-fx]').forEach(b => (b.onclick = () => { setFx(b.dataset.fx); paintFx(); toast('Animasi latar: ' + b.textContent.trim(), 'ok'); }));
+  paintFx();
   $('#logoutBtn').onclick = () => { session.clear(); toast('Kamu telah keluar'); location.hash = '#/login'; };
   api('/stats').then(s => {
     const v = [s.summary.allTime.questions, s.summary.allTime.accuracy, s.summary.allTime.points];

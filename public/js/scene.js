@@ -18,6 +18,7 @@ const SCENES = {
   sakura: { img: '/media/sakura.jpg', mob: '/media/sakura-m.jpg', mask: '/media/sakura-mask.png', fx: ['petals'] },
 };
 export const SCENE_THEMES = Object.keys(SCENES);
+import { fxLevel } from './perf.js';
 const SMALL = () => innerWidth < 760;
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -41,10 +42,11 @@ function mount(key) {
     ${S.fx.includes('fog') ? '<div class="sc-fog f1"></div><div class="sc-fog f2"></div>' : ''}
     <canvas class="sc-fx"></canvas><div class="sc-vig"></div>`;
   document.body.prepend(root);
-  if (!SMALL()) listen(window, 'pointermove', e => { pointer.tx = e.clientX / innerWidth - 0.5; pointer.ty = e.clientY / innerHeight - 0.5; }, { passive: true });
-  listen(window, 'scroll', () => { pointer.sy = scrollY; }, { passive: true });
+  const FX = fxLevel(); root.dataset.fx = FX;
+  if (!SMALL() && FX === 'full') listen(window, 'pointermove', e => { pointer.tx = e.clientX / innerWidth - 0.5; pointer.ty = e.clientY / innerHeight - 0.5; }, { passive: true });
+  if (FX === 'full') listen(window, 'scroll', () => { pointer.sy = scrollY; }, { passive: true });
   (S.mask ? mountGL(S) : S.paint ? mountPaint(S) : mountPhoto(S)).catch(() => root?.classList.add('no-photo', 'ready'));
-  startFx(root.querySelector('.sc-fx'), S.fx);
+  if (FX !== 'off') startFx(root.querySelector('.sc-fx'), S.fx, FX === 'lite');
   const par = root.querySelector('.sc-par');
   const tick = () => {
     if (!alive) return;
@@ -53,7 +55,7 @@ function mount(key) {
     else if (!S.mask) par.style.transform = `translate3d(${(-pointer.x * 26).toFixed(1)}px, ${(-pointer.y * 16 - Math.min(pointer.sy, 1500) * 0.04).toFixed(1)}px, 0)`;
     requestAnimationFrame(tick);
   };
-  if (!reduced) tick();
+  if (!reduced && FX === 'full') tick(); else if (S.paint) setTimeout(paintParallax, 50);
 }
 
 function unmount() {
@@ -133,7 +135,7 @@ function paintScene(P, W, H) {
 async function mountPaint(S) {
   const kb = root.querySelector('.sc-kb'); const P = PAINT[S.paint];
   const draw = () => {
-    const d = Math.min(devicePixelRatio || 1, 1.25), W = Math.round((innerWidth + 80) * d), H = Math.round((innerHeight + 80) * d);
+    const d = fxLevel() === 'full' ? Math.min(devicePixelRatio || 1, 1.25) : 1, W = Math.round((innerWidth + 80) * d), H = Math.round((innerHeight + 80) * d);
     kb.querySelectorAll('canvas').forEach(c => c.remove());
     layers = paintScene(P, W, H).map(L => { L.c.className = 'sc-layer'; kb.appendChild(L.c); return L; });
     root.classList.add('ready');
@@ -186,14 +188,15 @@ async function mountGL(S) {
   tex(0, img); tex(1, msk);
   const U = n => gl.getUniformLocation(pr, n);
   gl.uniform1i(U('img'), 0); gl.uniform1i(U('msk'), 1); gl.uniform2f(U('isz'), img.naturalWidth, img.naturalHeight);
-  const size = () => { const d = Math.min(devicePixelRatio || 1, mobile ? 1.25 : 1.5); cv.width = innerWidth * d; cv.height = innerHeight * d; gl.viewport(0, 0, cv.width, cv.height); gl.uniform2f(U('res'), cv.width, cv.height); };
+  let last = 0;
+  const size = () => { last = 0; const d = fxLevel() === 'full' ? Math.min(devicePixelRatio || 1, mobile ? 1.25 : 1.5) : 1; cv.width = innerWidth * d; cv.height = innerHeight * d; gl.viewport(0, 0, cv.width, cv.height); gl.uniform2f(U('res'), cv.width, cv.height); };
   size(); listen(window, 'resize', size);
   root.classList.add('ready');
-  const t0 = performance.now(); let last = 0;
+  const t0 = performance.now();
   const draw = now => {
     if (!alive) { gl.getExtension('WEBGL_lose_context')?.loseContext(); return; }
     requestAnimationFrame(draw);
-    if (document.hidden || now - last < (mobile ? 40 : 28)) return; last = now;   // ±25–35 fps cukup halus & hemat
+    if (document.hidden || (last && now - last < (fxLevel() === 'off' ? 1e9 : fxLevel() === 'lite' ? 45 : mobile ? 40 : 28))) return; last = now;   // ±25–35 fps; hemat 22 fps; mati = diam
     const t = (now - t0) / 1000;
     gust = 0.75 + 0.35 * Math.sin(t * 0.33) + 0.2 * Math.sin(t * 0.91 + 1.3);       // hembusan angin naik-turun
     gl.uniform1f(U('t'), reduced ? 0 : t); gl.uniform1f(U('gust'), gust);
@@ -205,11 +208,12 @@ async function mountGL(S) {
 }
 
 /* ───── Partikel: debu cahaya (senja) / kelopak sakura ───── */
-function startFx(cv, fx) {
+function startFx(cv, fx, lite = false) {
   if (reduced || !['dust', 'petals', 'fireflies', 'birds'].some(f => fx.includes(f))) return;
   const ctx = cv.getContext('2d'), petals = fx.includes('petals'), ff = fx.includes('fireflies'), birds = fx.includes('birds');
-  const N = petals ? (SMALL() ? 16 : 34) : birds ? 6 : (SMALL() ? 18 : 42); let W, H, d;
-  const size = () => { d = Math.min(devicePixelRatio || 1, 1.5); W = cv.width = innerWidth * d; H = cv.height = innerHeight * d; cv.style.width = innerWidth + 'px'; cv.style.height = innerHeight + 'px'; };
+  let N = petals ? (SMALL() ? 16 : 34) : birds ? 6 : (SMALL() ? 18 : 42); let W, H, d;
+  if (lite) N = Math.ceil(N * 0.45);
+  const size = () => { d = lite ? 1 : Math.min(devicePixelRatio || 1, 1.5); W = cv.width = innerWidth * d; H = cv.height = innerHeight * d; cv.style.width = innerWidth + 'px'; cv.style.height = innerHeight + 'px'; };
   size(); listen(window, 'resize', size);
   const mk = () => ({ x: Math.random(), y: petals ? -Math.random() : Math.random(), r: petals ? 4 + Math.random() * 5 : 0.6 + Math.random() * 2.2,
     s: petals ? 0.0012 + Math.random() * 0.0016 : 0.00015 + Math.random() * 0.0005, w: Math.random() * 6.28, rot: Math.random() * 6.28, a: 0.35 + Math.random() * 0.55,
@@ -220,7 +224,7 @@ function startFx(cv, fx) {
   let last = 0;
   const loop = now => {
     if (!alive) return; requestAnimationFrame(loop);
-    if (document.hidden || now - last < 33) return; last = now;
+    if (document.hidden || now - last < (lite ? 50 : 33)) return; last = now;
     ctx.clearRect(0, 0, W, H);
     for (const p of P) {
       p.w += 0.03;
@@ -260,3 +264,4 @@ export function syncScene() {
   if (SCENES[k]) mount(k);
 }
 window.addEventListener('theme:change', syncScene);
+window.addEventListener('fx:change', () => { const k = cur; unmount(); if (k) mount(k); });
