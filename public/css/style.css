@@ -722,3 +722,17 @@ body { transition: background-color .4s, color .4s; }
 @media (max-width: 600px) { .cc-label small { display: none; } .cc-tag small { display: none; } }
 .cc-tag.compact small { display: none; }
 .cc-tag.compact { padding: 2px 6px; }
+
+/* Command Center: ikut tema */
+.cc-stage { background: radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--cyan) 14%, transparent), transparent 62%), var(--glass); }
+.cc-tag { background: color-mix(in srgb, var(--glass-strong) 94%, transparent); color: var(--text); border: 1px solid var(--line-strong); box-shadow: 0 4px 12px -6px rgba(0,0,0,.45); }
+.cc-tag small { color: var(--cyan); }
+.cc-tag::after { border-top-color: var(--line-strong); }
+.cc-tag.bot { border: 1.5px dashed var(--c); background: color-mix(in srgb, var(--c) 16%, var(--glass-strong)); }
+.cc-tag.bot b { font-size: 10.5px; }
+.cc-tag.bot small { color: var(--muted); }
+.cc-core { background: color-mix(in srgb, var(--glass-strong) 92%, transparent); color: var(--text); border: 1.5px solid var(--cyan); box-shadow: 0 0 18px -6px var(--cyan); }
+.cc-core b { color: var(--cyan); }
+.guard-card { display: flex; gap: 10px; align-items: center; margin-top: 10px; padding: 10px 12px; border-radius: 14px; border: 1.5px dashed var(--c); background: color-mix(in srgb, var(--c) 10%, transparent); }
+.guard-ico { font-size: 24px; }
+@media (max-width: 600px) { .cc-tag.bot small { display: none; } }
