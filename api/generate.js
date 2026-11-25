@@ -79,7 +79,7 @@ function id(cat, text) {
   return `n-${cat}-${crypto.createHash('sha1').update(text.toLowerCase()).digest('hex').slice(0, 12)}`;
 }
 
-async function materialFor(cat, headlines, today) {
+async function materialFor(cat, headlines, today, deadline) {
   const out = await geminiJSON(`Kamu mentor persiapan tes seleksi kerja Indonesia (CPNS, BUMN, OJK, Bank Indonesia, Telkom).
 Hari ini ${today}. Topik: ${CAT_LABEL[cat]}.
 
@@ -97,7 +97,7 @@ Format JSON:
  "keyPoints":["poin kunci singkat"],                              // 3-5
  "glossary":[{"term":"istilah","def":"definisi singkat"}],          // 3-5
  "tips":["tips menjawab soal terkait topik ini"],                  // 2-3
- "sourceIndexes":[0,1]}`);
+ "sourceIndexes":[0,1]}`, { deadline });
   const str = v => String(v || '').trim();
   const sections = (out.sections || []).map(x => ({ heading: str(x.heading), body: str(x.body) })).filter(x => x.heading && x.body).slice(0, 5);
   if (!str(out.title) || sections.length < 2) return null;
@@ -116,7 +116,7 @@ Format JSON:
   };
 }
 
-async function generateFor(cat) {
+async function generateFor(cat, T0) {
   const lists = await Promise.all(NEWS_TOPICS[cat].map(q => fetchHeadlines(q, 6)));
   const seen = new Set();
   const headlines = lists.flat().filter(h => (seen.has(h.title) ? false : seen.add(h.title))).slice(0, 10);
@@ -143,14 +143,18 @@ Format JSON:
 {"questions":[{"type":"pg","difficulty":"normal","question":"...","options":["...","...","...","..."],"answer":0,"explanation":"...","sourceIndex":0},
 {"type":"essay","difficulty":"hard","question":"...","keyPoints":["..."],"modelAnswer":"...","explanation":"...","sourceIndex":1},
 {"type":"interactive","kind":"match","difficulty":"normal","question":"Cocokkan ...","pairs":[{"a":"...","b":"..."}],"explanation":"...","sourceIndex":2},
-{"type":"interactive","kind":"order","difficulty":"hard","question":"Urutkan ...","items":["langkah 1","langkah 2","langkah 3","langkah 4"],"explanation":"...","sourceIndex":3}]}`);
+{"type":"interactive","kind":"order","difficulty":"hard","question":"Urutkan ...","items":["langkah 1","langkah 2","langkah 3","langkah 4"],"explanation":"...","sourceIndex":3}]}`, { deadline: T0 + 40000 });
 
   const list = Array.isArray(out) ? out : out.questions || out.soal || out.items || [];
   const qs = list.map(q => validate(q, cat, headlines)).filter(Boolean);
   if (list.length && !qs.length) console.warn('[generate] semua soal ditolak validator', cat, JSON.stringify(list[0]).slice(0, 300));
   const db = await getDB();
   const saved = qs.length ? await db.addQuestions(qs) : 0;
-  const mat = await materialFor(cat, headlines, today).catch(e => { console.error('materi', cat, e.message); return null; });
+  // materi dibuat setelah soal, hanya jika sisa waktu fungsi masih cukup
+  const matDeadline = T0 + 56000;
+  const mat = matDeadline - Date.now() > 12000
+    ? await materialFor(cat, headlines, today, matDeadline).catch(e => { console.error('materi', cat, e.message); return null; })
+    : null;
   if (mat) { await db.addMaterials([mat]); await db.pruneMaterials(MAX_MATERIALS).catch(e => console.error('prune', e.message)); }
   return { cat, saved, material: mat ? 1 : 0, headlines, reason: saved ? '' : list.length ? 'format soal dari AI tidak sesuai' : 'AI tidak mengirim soal' };
 }
@@ -176,7 +180,8 @@ export default handle(['GET', 'POST'], async (req, res) => {
   if (running?.running && Date.now() - running.at < 2 * 60 * 1000) throw httpError(409, 'Generate masih berjalan, tunggu sekitar 1 menit lalu cek lagi.');
   await dbg.setMeta('genStatus', { running: true, at: Date.now(), by, cats }).catch(() => {});
   let results;
-  try { results = await Promise.allSettled(cats.map(generateFor)); }
+  const T0 = Date.now();
+  try { results = await Promise.allSettled(cats.map(c => generateFor(c, T0))); }
   finally { await dbg.setMeta('genStatus', { running: false, at: Date.now(), by }).catch(() => {}); }
   const summary = results.map((r, i) => r.status === 'fulfilled'
     ? { cat: r.value.cat, saved: r.value.saved, material: r.value.material || 0, reason: r.value.reason || '' }

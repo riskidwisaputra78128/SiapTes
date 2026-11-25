@@ -65,7 +65,7 @@ Kembalikan JSON persis dengan format:
  "covered": ["poin kunci yang maksudnya sudah tercakup"],
  "missed": ["poin kunci yang belum tercakup"],
  "corrections": [{"issue": "bagian jawaban yang keliru/kurang tepat (kutip singkat)", "fix": "koreksi yang benar"}],
- "improved": "versi jawaban peserta yang sudah diperbaiki, 3-6 kalimat"}`);
+ "improved": "versi jawaban peserta yang sudah diperbaiki, 3-6 kalimat"}`, { deadline: Date.now() + 26000 });
       const score = Math.max(0, Math.min(100, Math.round(Number(out.score) || 0)));
       return send(res, 200, {
         score,
