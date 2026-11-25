@@ -7,6 +7,7 @@ import { CORE_MATERIALS } from './_lib/seed-materials.js';
 const brief = m => ({
   id: m.id, core: !!m.core, category: m.category, title: m.title, summary: m.summary,
   day: m.day || null, readMin: m.readMin || 3, createdAt: m.createdAt || null, sourcesCount: m.sources?.length || 0,
+  cover: m.cover || null, extras: !!(m.flow?.length || m.stats?.length || m.quiz?.length),
 });
 
 export default handle(['GET'], async (req, res) => {

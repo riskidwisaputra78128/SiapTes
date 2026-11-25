@@ -79,7 +79,7 @@ function id(cat, text) {
   return `n-${cat}-${crypto.createHash('sha1').update(text.toLowerCase()).digest('hex').slice(0, 12)}`;
 }
 
-async function materialFor(cat, headlines, today, deadline) {
+async function materialFor(cat, headlines, today, deadline, pics = []) {
   const out = await geminiJSON(`Kamu mentor persiapan tes seleksi kerja Indonesia (CPNS, BUMN, OJK, Bank Indonesia, Telkom).
 Hari ini ${today}. Topik: ${CAT_LABEL[cat]}.
 
@@ -93,7 +93,10 @@ Aturan:
 Format JSON:
 {"title":"judul menarik maks 80 karakter",
  "summary":"2-3 kalimat ringkasan",
- "sections":[{"heading":"...","body":"1 paragraf 3-5 kalimat"}],   // 3-4 bagian: apa yang terjadi, konsep/dasar hukum terkait, dampak, kaitan dengan tes
+ "sections":[{"icon":"1 emoji","heading":"...","body":"1 paragraf 3-5 kalimat"}],   // 3-4 bagian: apa yang terjadi, konsep/dasar hukum terkait, dampak, kaitan dengan tes
+ "stats":[{"value":"6","unit":"%","label":"proyeksi pertumbuhan 2027","icon":"1 emoji"}],  // 0-4 angka penting, HANYA angka yang tertulis di judul berita; kosongkan jika tidak ada
+ "flow":[{"icon":"1 emoji","title":"maks 4 kata","desc":"1 kalimat"}],  // 3-5 langkah alur sebab → akibat / mekanisme kebijakan
+ "quiz":[{"q":"pertanyaan cek pemahaman","options":["a","b","c","d"],"answer":0,"why":"1 kalimat alasan"}],  // tepat 2 soal
  "keyPoints":["poin kunci singkat"],                              // 3-5
  "glossary":[{"term":"istilah","def":"definisi singkat"}],          // 3-5
  "tips":["tips menjawab soal terkait topik ini"],                  // 2-3
@@ -102,8 +105,24 @@ Format JSON:
   const sections = (out.sections || []).map(x => ({ heading: str(x.heading), body: str(x.body) })).filter(x => x.heading && x.body).slice(0, 5);
   if (!str(out.title) || sections.length < 2) return null;
   const sources = [...new Set((out.sourceIndexes || []).map(Number))].map(i => headlines[i]).filter(Boolean)
-    .map(h => ({ title: h.title, link: h.link, publisher: h.source, date: h.date }));
+    .map(h => ({ title: h.title, link: h.link, publisher: h.source, date: h.date, image: h.image || null }));
   const words = [out.summary, ...sections.map(x => x.body)].join(' ').split(/\s+/).length;
+  const emo = v => { const t = str(v); return t && t.length <= 8 ? t : ''; };
+  sections.forEach((x, i) => { x.icon = emo((out.sections || [])[i]?.icon); });
+  const stats = (out.stats || []).map(x => ({ value: str(x.value).slice(0, 12), unit: str(x.unit).slice(0, 12), label: str(x.label).slice(0, 60), icon: emo(x.icon) }))
+    .filter(x => x.value && x.label && /\d/.test(x.value)).slice(0, 4);
+  const flow = (out.flow || []).map(x => ({ title: str(x.title).slice(0, 40), desc: str(x.desc).slice(0, 160), icon: emo(x.icon) })).filter(x => x.title).slice(0, 5);
+  const quiz = (out.quiz || []).map(x => {
+    const options = (Array.isArray(x.options) ? x.options : Object.values(x.options || {})).map(str).filter(Boolean).slice(0, 4);
+    let a = typeof x.answer === 'number' ? x.answer : /^[A-D]$/i.test(str(x.answer)) ? 'ABCD'.indexOf(str(x.answer).toUpperCase()) : options.indexOf(str(x.answer));
+    return { q: str(x.q || x.question), options, answer: a, why: str(x.why || x.explanation) };
+  }).filter(x => x.q && x.options.length >= 2 && x.answer >= 0 && x.answer < x.options.length).slice(0, 3);
+  // Gambar: foto dari berita sumber (ANTARA/CNBC) + berita bergambar lain dengan topik sama
+  const srcObjs = sources.length ? sources : headlines.slice(0, 3).map(h => ({ title: h.title, link: h.link, publisher: h.source, date: h.date, image: h.image || null }));
+  const seenImg = new Set();
+  const images = [...headlines.filter(h => h.image), ...pics.filter(h => h.image)]
+    .filter(h => (seenImg.has(h.image) ? false : seenImg.add(h.image)))
+    .slice(0, 5).map(h => ({ url: h.image, title: h.title, link: h.link, source: h.source }));
   const day = dayKey(Date.now());
   return {
     // id unik per generate → materi menumpuk, tidak menimpa
@@ -111,7 +130,7 @@ Format JSON:
     sections, keyPoints: (out.keyPoints || []).map(str).filter(Boolean).slice(0, 6),
     glossary: (out.glossary || []).map(g => ({ term: str(g.term), def: str(g.def) })).filter(g => g.term && g.def).slice(0, 6),
     tips: (out.tips || []).map(str).filter(Boolean).slice(0, 4),
-    sources: sources.length ? sources : headlines.slice(0, 3).map(h => ({ title: h.title, link: h.link, publisher: h.source, date: h.date })),
+    sources: srcObjs, stats, flow, quiz, images, cover: images[0]?.url || null,
     readMin: Math.max(2, Math.round(words / 180)), createdAt: Date.now(), generated: true,
   };
 }
@@ -161,12 +180,14 @@ Format JSON:
   }
   let mat = null;
   if (type !== 'soal') {
+    // foto berita bertopik sama dari ANTARA/CNBC (maks 5 dtk, di-cache 10 menit)
+    const pics = await Promise.race([fetchBackup(cat, 12).catch(() => []), new Promise(r => setTimeout(() => r([]), 5000))]);
     // materi: jika mode 'all', dibuat setelah soal hanya bila sisa waktu fungsi masih cukup
     const matDeadline = T0 + (type === 'materi' ? 55000 : 56000);
     if (matDeadline - Date.now() > 12000) {
       mat = type === 'materi'
-        ? await materialFor(cat, headlines, today, matDeadline)            // mode materi: error dilaporkan
-        : await materialFor(cat, headlines, today, matDeadline).catch(e => { console.error('materi', cat, e.message); return null; });
+        ? await materialFor(cat, headlines, today, matDeadline, pics)            // mode materi: error dilaporkan
+        : await materialFor(cat, headlines, today, matDeadline, pics).catch(e => { console.error('materi', cat, e.message); return null; });
     }
     if (mat) { await db.addMaterials([mat]); await db.pruneMaterials(MAX_MATERIALS).catch(e => console.error('prune', e.message)); }
   }
