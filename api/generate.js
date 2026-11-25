@@ -106,7 +106,7 @@ Format JSON:
   const words = [out.summary, ...sections.map(x => x.body)].join(' ').split(/\s+/).length;
   const day = dayKey(Date.now());
   return {
-    id: `m-${day}-${cat}`, day, category: cat, title: str(out.title).slice(0, 120), summary: str(out.summary),
+    id: `m-${day}-${cat}-${Date.now().toString(36)}`, day,  // unik per generate → materi menumpuk, tidak menimpa category: cat, title: str(out.title).slice(0, 120), summary: str(out.summary),
     sections, keyPoints: (out.keyPoints || []).map(str).filter(Boolean).slice(0, 6),
     glossary: (out.glossary || []).map(g => ({ term: str(g.term), def: str(g.def) })).filter(g => g.term && g.def).slice(0, 6),
     tips: (out.tips || []).map(str).filter(Boolean).slice(0, 4),
