@@ -1,6 +1,6 @@
 // Arena Duel: lobby (buat/gabung/daftar room aktif) + ruang duel real-time (polling)
 import { api, session } from './api.js';
-import { $, $$, esc, toast, sheet, confetti, vibrate, fmt, icons } from './ui.js';
+import { $, $$, esc, toast, sheet, confetti, vibrate, fmt, icons, avatar } from './ui.js';
 import { CATEGORIES, DIFFS, catByKey, diffByKey } from './data.js';
 import { setDuelPresence, onlineWidget } from './presence.js';
 
@@ -188,6 +188,7 @@ function renderRoom(app, code) {
     return `<div class="duel-players">${st.players.map(p => `
       <div class="dp ${p.me ? 'me' : ''} ${p.left ? 'left' : ''}">
         <span class="dp-rank">${mode === 'lobby' ? (p.isHost ? '👑' : p.isBot ? '🤖' : '👤') : p.rank}</span>
+        ${p.isBot ? '<span class="av md bot"><em>🤖</em></span>' : avatar(p, 'md')}
         <span class="dp-name">${esc(p.name)}${p.me ? ' (kamu)' : ''}${p.left ? ' · keluar' : ''}</span>
         ${mode === 'lobby' ? '' : mode === 'question'
           ? `<span class="dp-ans ${p.answered ? 'yes' : ''}">${p.answered ? '✓ menjawab' : '…'}</span>`
@@ -329,7 +330,7 @@ function renderRoom(app, code) {
     if (same) return;
     cancelAnimationFrame(raf);
     const ps = st.players; const meP = ps.find(p => p.me);
-    const pod = (p, cls) => p ? `<div class="p ${cls}"><div class="nm">${esc(p.name)}</div><div class="block">${cls === 'p1' ? '👑' : cls === 'p2' ? '🥈' : '🥉'}<br>${fmt(p.score)}</div></div>` : '<div></div>';
+    const pod = (p, cls) => p ? `<div class="p ${cls}">${p.isBot ? '<span class="av pod bot"><em>🤖</em></span>' : avatar(p, 'pod')}<div class="nm">${esc(p.name)}</div><div class="block">${cls === 'p1' ? '👑' : cls === 'p2' ? '🥈' : '🥉'}<br>${fmt(p.score)}</div></div>` : '<div></div>';
     root.innerHTML = `${header()}
       <div class="glass result-hero">
         <h1 class="h2" style="font-size:24px">${meP?.rank === 1 ? '🏆 Kamu juara!' : `Kamu peringkat ${meP?.rank ?? '-'} dari ${ps.length}`}</h1>

@@ -1,5 +1,5 @@
 import { api, session, getInfo } from './api.js';
-import { $, $$, esc, toast, bindTilt, icons, fmt, timeAgo, countUp } from './ui.js';
+import { $, $$, esc, toast, bindTilt, icons, fmt, timeAgo, countUp, avatar } from './ui.js';
 import { CATEGORIES, TARGETS, catByKey } from './data.js';
 import { initBackground } from './three-bg.js';
 import { renderSetup, renderQuiz, renderResult, practice } from './practice.js';
@@ -8,7 +8,7 @@ import { renderTech } from './tech.js';
 import { renderMateri, getMaterials } from './materi.js';
 import { renderDuel } from './duel.js';
 import { renderAdminLive } from './admin-live.js';
-import { startPresence, onlineWidget, isHidden, setHidden, presence } from './presence.js';
+import { startPresence, onlineWidget, isHidden, setHidden, presence, refreshPresence } from './presence.js';
 import { applyTheme, currentTheme, openThemePicker, THEMES } from './theme.js';
 
 const app = $('#app');
@@ -32,7 +32,14 @@ function chrome(show, active) {
   $('#bottomnav').innerHTML = links;
   $('#topnav').innerHTML = NAV.map(n => `<a href="${n.href}" class="${n.key === active ? 'on' : ''}">${n.label}</a>`).join('');
   const u = session.user;
-  $('#avatarBtn').textContent = u ? (u.name || '?').trim()[0].toUpperCase() : '👤';
+  paintAvatarBtn();
+}
+function paintAvatarBtn() {
+  const u = session.user, b = $('#avatarBtn');
+  if (!b) return;
+  b.classList.toggle('has-photo', !!u?.avatar);
+  b.innerHTML = u?.avatar ? `<img src="${esc(u.avatar)}" alt="Profil" onerror="this.parentNode.classList.remove('has-photo');this.replaceWith(document.createTextNode('${esc((u.name || '?').trim()[0].toUpperCase())}'))">`
+    : esc(u ? (u.name || '?').trim()[0].toUpperCase() : '👤');
 }
 
 async function route() {
@@ -275,9 +282,9 @@ async function renderHome() {
     <div class="section-head"><h2 class="h2">Materi tes</h2><a href="#/latihan">Lihat semua →</a></div>
     <div class="cat-grid">
       ${CATEGORIES.slice(1).map(c => `
-        <a class="glass cat-card tilt" href="#/latihan?category=${c.key}">
-          <span class="glow" style="background:${c.color}"></span>
-          <span class="ico">${c.ico}</span><b>${c.name}</b><small>${c.tags}${c.fresh ? ' · <span class="chip new" style="padding:1px 6px">BARU</span>' : ''}</small>
+        <a class="glass cat-card has-img tilt" href="#/latihan?category=${c.key}">
+          <span class="cat-img"><img src="/img/cat/${c.key}.svg" alt="" loading="lazy"></span>
+          <b>${c.name}</b><small>${c.tags}${c.fresh ? ' · <span class="chip new" style="padding:1px 6px">BARU</span>' : ''}</small>
           <span class="cat-count" data-count="${c.key}"></span>
         </a>`).join('')}
     </div>
@@ -318,17 +325,17 @@ async function renderHome() {
     renderBank(d.bank);
     const el = $('#newsList'); if (!el) return;
     el.innerHTML = d.items.length ? d.items.slice(0, 5).map(n => `
-      <div class="news-item"><span class="dot"></span><div>
-        <a href="${esc(n.link)}" target="_blank" rel="noopener">${esc(n.title)}</a>
-        <div class="dim">${esc(n.source || '')} · ${timeAgo(n.date)}</div></div></div>`).join('')
+      <a class="news-item" href="${esc(n.link)}" target="_blank" rel="noopener">${newsThumb(n)}<div style="min-width:0">
+        <span class="nt">${esc(n.title)}</span>
+        <div class="dim">${esc(n.source || '')} · ${timeAgo(n.date)}</div></div></a>`).join('')
       : `<div class="empty">Berita belum tersedia. Soal isu terkini dibuat otomatis setiap pagi.</div>`;
   }).catch(() => { const el = $('#newsList'); if (el) el.innerHTML = '<div class="empty">Gagal memuat berita.</div>'; });
 
   api('/leaderboard?period=week').then(d => {
     const el = $('#lbMini'); if (!el) return;
     el.innerHTML = d.top.length ? d.top.slice(0, 5).map(r => `
-      <div class="lb-row ${r.me ? 'me' : ''}"><span class="rank ${r.rank <= 3 ? 'r' + r.rank : ''}">${r.rank}</span>
-      <b style="flex:1">${esc(r.name)}</b><span class="dim">${r.accuracy}%</span><b style="font-family:var(--num)">${fmt(r.points)}</b></div>`).join('')
+      <div class="lb-row ${r.me ? 'me' : ''}"><span class="rank ${r.rank <= 3 ? 'r' + r.rank : ''}">${r.rank}</span>${avatar(r, 'md')}
+      <b style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.name)}</b><span class="dim">${r.accuracy}%</span><b style="font-family:var(--num)">${fmt(r.points)}</b></div>`).join('')
       : '<div class="empty">Belum ada peserta minggu ini. Jadilah yang pertama! 🚀</div>';
   }).catch(() => {});
 
@@ -348,6 +355,71 @@ async function renderHome() {
   }
 }
 
+/* Thumbnail berita: foto dari sumber bila ada, kalau tidak ilustrasi topik + logo media */
+function newsThumb(n) {
+  const cat = catByKey[n.cat] ? n.cat : 'isu';
+  const fav = n.site ? `<img class="fav" src="https://www.google.com/s2/favicons?domain=${encodeURIComponent(n.site)}&sz=64" alt="" loading="lazy" onerror="this.remove()">` : '';
+  const fb = `<img src="/img/cat/${cat}.svg" alt="" loading="lazy">${fav}`;
+  return `<span class="news-thumb">${n.image
+    ? `<img src="${esc(n.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode.innerHTML='<img src=&quot;/img/cat/${cat}.svg&quot; alt=&quot;&quot;>'">`
+    : fb}</span>`;
+}
+
+/* ───────── Foto profil ───────── */
+function loadImage(file) {
+  return new Promise((ok, no) => {
+    const url = URL.createObjectURL(file); const img = new Image();
+    img.onload = () => { URL.revokeObjectURL(url); ok(img); };
+    img.onerror = () => { URL.revokeObjectURL(url); no(new Error('File bukan gambar yang didukung. Coba JPG atau PNG.')); };
+    img.src = url;
+  });
+}
+async function squareJPEG(file, size = 256) {
+  if (file.size > 15 * 1024 * 1024) throw new Error('Foto terlalu besar (maks 15 MB)');
+  const img = await loadImage(file);
+  const s = Math.min(img.naturalWidth, img.naturalHeight);
+  const c = document.createElement('canvas'); c.width = c.height = size;
+  const x = c.getContext('2d');
+  x.fillStyle = '#fff'; x.fillRect(0, 0, size, size);
+  x.drawImage(img, (img.naturalWidth - s) / 2, (img.naturalHeight - s) / 2, s, s, 0, 0, size, size);
+  for (const q of [0.86, 0.75, 0.6, 0.45]) { const d = c.toDataURL('image/jpeg', q); if (d.length < 120000) return d; }
+  return c.toDataURL('image/jpeg', 0.35);
+}
+function bindPhoto() {
+  const file = $('#pfFile'); if (!file) return;
+  const pick = () => file.click();
+  $('#pfPick').onclick = pick; $('#pfUp').onclick = pick;
+  file.onchange = async () => {
+    const f = file.files[0]; file.value = ''; if (!f) return;
+    const btn = $('#pfUp'); btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Mengunggah…';
+    try {
+      const image = await squareJPEG(f);
+      const r = await api('/avatar', { method: 'POST', body: { image } });
+      session.patch({ avatar: r.avatar });
+      toast('Foto profil diperbarui 🎉', 'ok');
+      paintAvatarBtn(); renderProfile(); refreshPresence();
+    } catch (e) { toast(e.message, 'err'); btn.disabled = false; btn.textContent = '📷 Coba lagi'; }
+  };
+  const del = $('#pfDel');
+  if (del) del.onclick = async () => {
+    if (!confirmDelete()) return;
+    del.disabled = true;
+    try { await api('/avatar', { method: 'DELETE' }); session.patch({ avatar: null }); toast('Foto profil dihapus'); paintAvatarBtn(); renderProfile(); }
+    catch (e) { toast(e.message, 'err'); del.disabled = false; }
+  };
+}
+function confirmDelete() {
+  const b = $('#pfDel');
+  if (b.dataset.sure) return true;
+  b.dataset.sure = '1'; b.textContent = 'Yakin hapus?'; setTimeout(() => { if (b.isConnected) { delete b.dataset.sure; b.textContent = 'Hapus'; } }, 3000);
+  return false;
+}
+// sinkronkan foto dari server (mis. diganti di perangkat lain)
+function syncAvatar() {
+  if (!session.loggedIn) return;
+  api('/avatar?me=1').then(r => { if ((r.avatar || null) !== (session.user?.avatar || null)) { session.patch({ avatar: r.avatar }); paintAvatarBtn(); } }).catch(() => {});
+}
+
 /* ───────── Profil ───────── */
 function renderProfile() {
   const u = session.user;
@@ -361,9 +433,13 @@ function renderProfile() {
   app.innerHTML = `
   <section class="stack fade-in">
     <div class="glass card tilt row" style="gap:16px">
-      <div class="avatar-btn" style="width:68px;height:68px;font-size:28px;margin:0">${esc(u.name[0].toUpperCase())}</div>
+      <div class="prof-photo">
+        <button class="prof-av" id="pfPick" aria-label="Ganti foto profil">${avatar(u, 'xl')}<span class="prof-cam">📷</span></button>
+        <input type="file" id="pfFile" accept="image/jpeg,image/png,image/webp,image/heic,image/*" hidden>
+      </div>
       <div style="min-width:0"><h1 class="h2" style="font-size:22px">${esc(u.name)}</h1><div class="dim">${esc(u.email)}</div>
-      <div class="row wrap" style="margin-top:6px">${u.target ? `<span class="chip">🎯 ${esc(u.target)}</span>` : ''}${u.admin ? '<span class="chip new">Admin</span>' : ''}</div></div>
+      <div class="row wrap" style="margin-top:6px">${u.target ? `<span class="chip">🎯 ${esc(u.target)}</span>` : ''}${u.admin ? '<span class="chip new">Admin</span>' : ''}</div>
+      <div class="row wrap" style="margin-top:10px;gap:6px"><button class="btn sm" id="pfUp">📷 ${u.avatar ? 'Ganti foto' : 'Pasang foto'}</button>${u.avatar ? '<button class="btn ghost sm" id="pfDel">Hapus</button>' : ''}</div></div>
     </div>
     <div class="grid g3" id="profStats">${['Total soal', 'Akurasi', 'Total poin'].map(l => `<div class="glass stat"><div class="v">–</div><div class="l">${l}</div></div>`).join('')}</div>
     ${u.admin ? `
@@ -397,6 +473,7 @@ function renderProfile() {
   const tn = () => { const t = THEMES.find(x => x.key === currentTheme()); $('#profThemeName') && ($('#profThemeName').textContent = `${t.ico} ${t.name} — ${t.desc}`); };
   $('#onlineToggle').onchange = e => { setHidden(!e.target.checked); toast(e.target.checked ? 'Kamu terlihat online' : 'Status online disembunyikan', 'ok'); };
   tn(); $('#profTheme').onclick = openThemePicker; window.addEventListener('theme:change', tn);
+  bindPhoto();
   $('#logoutBtn').onclick = () => { session.clear(); toast('Kamu telah keluar'); location.hash = '#/login'; };
   api('/stats').then(s => {
     const v = [s.summary.allTime.questions, s.summary.allTime.accuracy, s.summary.allTime.points];
@@ -432,7 +509,7 @@ window.addEventListener('auth:expired', () => { toast('Sesi berakhir, silakan ma
 window.addEventListener('beforeunload', e => { if (practice.active) { e.preventDefault(); e.returnValue = ''; } });
 
 applyTheme(currentTheme(), { save: false });
-if (session.loggedIn) startPresence();
+if (session.loggedIn) { startPresence(); syncAvatar(); }
 window.addEventListener('hashchange', () => { if (session.loggedIn) startPresence(); });
 $('#themeBtn').onclick = openThemePicker;
 route();

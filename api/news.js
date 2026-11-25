@@ -2,7 +2,7 @@
 import { handle, send, startOfDayWIB } from './_lib/http.js';
 import { getDB, firebaseEnabled } from './_lib/db.js';
 import { aiEnabled } from './_lib/ai.js';
-import { fetchHeadlines, fetchBackup } from './_lib/news.js';
+import { fetchHeadlines, backupAll, CAT_KEYWORDS } from './_lib/news.js';
 import { SEED_QUESTIONS } from './_lib/seed.js';
 
 const CACHE_MS = 3 * 3600 * 1000;
@@ -30,19 +30,27 @@ async function questionBank(db) {
 
 export default handle(['GET'], async (req, res) => {
   const db = await getDB();
-  let news = await db.getMeta('news').catch(() => null);
+  let news = await db.getMeta('news2').catch(() => null);
   if (!news || Date.now() - news.at > CACHE_MS) {
-    const [eco, fin, bumn] = await Promise.all([
-      fetchHeadlines('ekonomi Indonesia', 3), fetchHeadlines('Bank Indonesia OJK', 3), fetchHeadlines('BUMN', 2),
+    const [eco, fin, bumn, extra] = await Promise.all([
+      fetchHeadlines('ekonomi Indonesia', 4), fetchHeadlines('Bank Indonesia OJK', 3), fetchHeadlines('BUMN', 2),
+      backupAll().catch(() => []),
     ]);
-    const items = [...eco.map(h => ({ ...h, cat: 'isu' })), ...fin.map(h => ({ ...h, cat: 'bi' })), ...bumn.map(h => ({ ...h, cat: 'bumn' }))];
-    if (items.length < 3) (await fetchBackup('isu', 8)).forEach(h => items.push({ ...h, cat: 'isu' }));
-    if (items.length) { news = { at: Date.now(), items }; db.setMeta('news', news).catch(() => {}); }
+    // Berita bergambar (ANTARA, CNBC) diutamakan; Google News sebagai pelengkap
+    const kw = [...CAT_KEYWORDS.bi, ...CAT_KEYWORDS.ojk, ...CAT_KEYWORDS.bumn, ...CAT_KEYWORDS.keuangan, 'ekonomi', 'ihsg', 'saham', 'pajak', 'apbn', 'investasi', 'ekspor', 'impor'];
+    const pics = extra.filter(i => i.image && Date.now() - i.date < 2 * 86400000)
+      .sort((a, b) => (kw.some(k => b.title.toLowerCase().includes(k)) - kw.some(k => a.title.toLowerCase().includes(k))) || b.date - a.date)
+      .slice(0, 5).map(h => ({ ...h, cat: 'isu' }));
+    const g = [...eco.map(h => ({ ...h, cat: 'isu' })), ...fin.map(h => ({ ...h, cat: 'bi' })), ...bumn.map(h => ({ ...h, cat: 'bumn' }))];
+    const seen = new Set();
+    const items = [...pics, ...g].filter(i => { const k = i.title.toLowerCase().slice(0, 50); return seen.has(k) ? false : seen.add(k); })
+      .sort((a, b) => (b.date + (b.image ? 6 * 3600e3 : 0)) - (a.date + (a.image ? 6 * 3600e3 : 0))).slice(0, 10);
+    if (items.length) { news = { at: Date.now(), items }; db.setMeta('news2', news).catch(() => {}); }
   }
   const [last, bank] = await Promise.all([db.getMeta('lastGenerate').catch(() => null), questionBank(db)]);
   res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=60');
   send(res, 200, {
-    items: (news?.items || []).slice(0, 8),
+    items: (news?.items || []).slice(0, 10),
     updatedAt: news?.at || null,
     bank,
     status: { firebase: firebaseEnabled(), ai: aiEnabled(), generatedQuestions: bank.generated, lastGenerate: last },

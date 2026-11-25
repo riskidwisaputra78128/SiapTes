@@ -1,6 +1,6 @@
 // Status online: heartbeat berkala + widget "sedang online"
 import { api, session } from './api.js';
-import { $, $$, esc, sheet, timeAgo } from './ui.js';
+import { $, $$, esc, sheet, timeAgo, avatar } from './ui.js';
 
 const HIDE_KEY = 'sl_hide_online';
 const BEAT_MS = 45000;
@@ -43,7 +43,7 @@ const initials = n => esc(String(n || '?').trim()[0]?.toUpperCase() || '?');
 const hue = n => [...String(n)].reduce((a, c) => a + c.charCodeAt(0), 0) % 360;
 
 export function avatarStack(users, max = 5) {
-  return `<div class="av-stack">${users.slice(0, max).map(u => `<span class="av" style="--h:${hue(u.name)}" title="${esc(u.name)}">${initials(u.name)}</span>`).join('')}
+  return `<div class="av-stack">${users.slice(0, max).map(u => avatar(u)).join('')}
     ${users.length > max ? `<span class="av more">+${users.length - max}</span>` : ''}</div>`;
 }
 
@@ -74,7 +74,7 @@ export function openOnlineList() {
     const { users } = presence;
     return users.length ? users.map(u => `
       <div class="ol-row ${u.me ? 'me' : ''}">
-        <span class="av lg" style="--h:${hue(u.name)}">${initials(u.name)}<i class="live-dot on"></i></span>
+        ${avatar(u, 'lg', '<i class="live-dot on"></i>')}
         <div style="flex:1;min-width:0">
           <b>${esc(u.name)}${u.me ? ' (kamu)' : ''}</b>
           <div class="dim">${ACTIVITY[u.page] || '🟢 Online'}${u.target ? ` · 🎯 ${esc(u.target)}` : ''}</div>

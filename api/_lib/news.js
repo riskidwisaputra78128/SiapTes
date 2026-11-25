@@ -31,12 +31,26 @@ async function fetchRSS(url, timeoutMs = 9000) {
   } catch (e) { console.warn('[news]', url, e.name); return null; }
   finally { clearTimeout(t); }
 }
+function imageOf(b) {
+  const pick = [
+    /<media:content[^>]*url="([^"]+)"/i, /<media:thumbnail[^>]*url="([^"]+)"/i,
+    /<enclosure[^>]*url="([^"]+)"[^>]*type="image/i, /<enclosure[^>]*type="image[^"]*"[^>]*url="([^"]+)"/i,
+    /<img[^>]*src=["']([^"']+)["']/i, /&lt;img[^&]*src=&quot;([^&]+)&quot;/i,
+  ];
+  for (const re of pick) {
+    const m = b.match(re);
+    if (m) { const u = m[1].replace(/&amp;/g, '&').trim(); if (/^https:\/\//.test(u)) return u; }
+  }
+  return null;
+}
 function parseItems(xml, defaultSource) {
   return xml.split('<item>').slice(1).map(b => {
     const title = tag(b, 'title'); const source = tag(b, 'source') || defaultSource;
+    const srcUrl = (b.match(/<source[^>]*url="([^"]+)"/) || [])[1] || '';
     return {
       title: source && title.endsWith(' - ' + source) ? title.slice(0, -(source.length + 3)) : title,
       link: tag(b, 'link') || tag(b, 'guid'), source, date: Date.parse(tag(b, 'pubDate')) || Date.now(),
+      image: imageOf(b), site: srcUrl.replace(/^https?:\/\//, '').replace(/\/.*$/, '') || null,
     };
   }).filter(i => i.title && i.link);
 }
@@ -58,6 +72,9 @@ export const CAT_KEYWORDS = {
   isu: [],
 };
 let backupCache = null;
+// Semua berita dari sumber cadangan (yang punya gambar), tanpa filter topik
+export async function backupAll() { await fetchBackup('isu', 1); return backupCache?.items || []; }
+
 export async function fetchBackup(cat, limit = 10) {
   if (!backupCache || Date.now() - backupCache.at > 10 * 60 * 1000) {
     const lists = await Promise.all(BACKUP_FEEDS.map(async f => { const x = await fetchRSS(f.url); return x ? parseItems(x, f.source) : []; }));

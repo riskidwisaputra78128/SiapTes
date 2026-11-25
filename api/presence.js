@@ -4,17 +4,19 @@
 import { handle, readBody, send } from './_lib/http.js';
 import { getUser, requireUser } from './_lib/auth.js';
 import { getDB } from './_lib/db.js';
+import { avatarMap, avatarUrl } from './_lib/avatar.js';
 
 const ONLINE_MS = 2.5 * 60 * 1000;
 const PAGES = ['beranda', 'latihan', 'quiz', 'hasil', 'materi', 'duel', 'evaluasi', 'peringkat', 'profil', 'teknologi', 'kantor'];
 
 async function onlineList(db, meUid) {
   const now = Date.now();
-  const list = (await db.listPresence(now - ONLINE_MS)).filter(p => !p.hidden);
+  const [all, avs] = await Promise.all([db.listPresence(now - ONLINE_MS), avatarMap(db)]);
+  const list = all.filter(p => !p.hidden);
   return list
     .sort((a, b) => (b.uid === meUid) - (a.uid === meUid) || b.lastSeen - a.lastSeen)
     .map(p => ({
-      name: p.name, target: p.target || '', page: p.page, me: p.uid === meUid,
+      name: p.name, avatar: avatarUrl(p.uid, avs), target: p.target || '', page: p.page, me: p.uid === meUid,
       duel: p.duel || null, since: p.since, idleSec: Math.round((now - p.lastSeen) / 1000),
     }));
 }

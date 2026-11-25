@@ -2,11 +2,13 @@
 import { handle, query, send, startOfWeekWIB, startOfMonthWIB } from './_lib/http.js';
 import { getUser } from './_lib/auth.js';
 import { getDB } from './_lib/db.js';
+import { avatarMap, avatarUrl } from './_lib/avatar.js';
 
 export default handle(['GET'], async (req, res) => {
   const period = query(req).get('period') === 'month' ? 'month' : 'week';
   const since = period === 'month' ? startOfMonthWIB(Date.now()) : startOfWeekWIB(Date.now());
-  const list = await (await getDB()).listAttemptsSince(since);
+  const db = await getDB();
+  const [list, avs] = await Promise.all([db.listAttemptsSince(since), avatarMap(db)]);
   const me = getUser(req);
   const m = new Map();
   for (const a of list) {
@@ -20,6 +22,7 @@ export default handle(['GET'], async (req, res) => {
     points: o.points, questions: o.questions, sessions: o.sessions,
     accuracy: o.questions ? Math.round((o.correct / o.questions) * 100) : 0,
     me: !!me && o.uid === me.uid,
+    avatar: avatarUrl(o.uid, avs),
   }));
   const mine = ranked.find(r => r.me) || null;
   send(res, 200, { period, top: ranked.slice(0, 20), mine, participants: ranked.length });

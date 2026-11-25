@@ -7,6 +7,7 @@
 import crypto from 'node:crypto';
 import { handle, readBody, send, httpError } from './_lib/http.js';
 import { signToken, isAdmin, devHash } from './_lib/auth.js';
+import { avatarMap, avatarUrl } from './_lib/avatar.js';
 import { getDB } from './_lib/db.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -88,5 +89,6 @@ export default handle(['POST'], async (req, res) => {
     });
   }
   const user = result.user;
-  send(res, 200, { token: signToken(user), user: { ...user, admin: isAdmin(user) } });
+  const avatar = avatarUrl(user.uid, await avatarMap(await getDB()).catch(() => ({})));
+  send(res, 200, { token: signToken(user), user: { ...user, admin: isAdmin(user), avatar } });
 });

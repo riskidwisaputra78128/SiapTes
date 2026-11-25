@@ -5,6 +5,15 @@ export function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+const hueOf = n => [...String(n || '')].reduce((a, c) => a + c.charCodeAt(0), 0) % 360;
+// Avatar bulat: foto bila ada, kalau tidak inisial berwarna
+export function avatar(u, cls = '', extra = '') {
+  const n = String(u?.name || '?').trim();
+  const ini = esc(n[0]?.toUpperCase() || '?');
+  return `<span class="av ${cls}" style="--h:${hueOf(n)}" title="${esc(n)}">${u?.avatar
+    ? `<img src="${esc(u.avatar)}" alt="" loading="lazy" onerror="this.remove()">` : ''}<em>${ini}</em>${extra}</span>`;
+}
+
 export function toast(msg, type = '') {
   const el = document.createElement('div');
   el.className = `toast ${type}`;

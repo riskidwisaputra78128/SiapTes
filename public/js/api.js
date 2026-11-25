@@ -7,6 +7,7 @@ export const session = {
   get guest() { return localStorage.getItem(KEY_G) === '1'; },
   get loggedIn() { return !!this.token && !!this.user; },
   set(token, user) { localStorage.setItem(KEY_T, token); localStorage.setItem(KEY_U, JSON.stringify(user)); localStorage.removeItem(KEY_G); },
+  patch(fields) { const u = this.user; if (u) localStorage.setItem(KEY_U, JSON.stringify({ ...u, ...fields })); },
   setGuest() { localStorage.setItem(KEY_G, '1'); },
   clear() { [KEY_T, KEY_U, KEY_G].forEach(k => localStorage.removeItem(k)); },
 };

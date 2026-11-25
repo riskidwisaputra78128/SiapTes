@@ -19,7 +19,7 @@ async function init() {
     return memoryBackend();
   }
   const { initializeApp, cert, getApps } = await import('firebase-admin/app');
-  const { getFirestore } = await import('firebase-admin/firestore');
+  const { getFirestore, FieldValue } = await import('firebase-admin/firestore');
   let sa;
   try {
     const txt = raw.trim().startsWith('{') ? raw : Buffer.from(raw, 'base64').toString('utf8');
@@ -122,6 +122,10 @@ function firestoreBackend(fs) {
     },
     async getMeta(key) { const d = await M.doc(key).get(); return d.exists ? d.data() : null; },
     async setMeta(key, val) { await M.doc(key).set(val, { merge: false }); },
+    async getAvatar(id) { const d = await fs.collection('avatars').doc(id).get(); return d.exists ? d.data() : null; },
+    async setAvatar(id, data) { await fs.collection('avatars').doc(id).set(data); },
+    async deleteAvatar(id) { await fs.collection('avatars').doc(id).delete().catch(() => {}); },
+    async setMetaField(key, field, val) { await M.doc(key).set({ [field]: val === null ? FieldValue.delete() : val }, { merge: true }); },
     // Akun dev tidak dipakai di Firestore (akun disimpan di Google Sheet via Apps Script)
   };
 }
@@ -153,6 +157,10 @@ function memoryBackend() {
     async listRooms() { return [...(g.rooms || new Map()).values()].filter(r => ['waiting', 'playing'].includes(r.status)).map(r => structuredClone(r)); },
     async getMeta(key) { return g.m.get(key) || null; },
     async setMeta(key, val) { g.m.set(key, val); },
+    async getAvatar(id) { return (g.av ||= new Map()).get(id) || null; },
+    async setAvatar(id, data) { (g.av ||= new Map()).set(id, data); },
+    async deleteAvatar(id) { (g.av ||= new Map()).delete(id); },
+    async setMetaField(key, field, val) { const o = { ...(g.m.get(key) || {}) }; if (val === null) delete o[field]; else o[field] = val; g.m.set(key, o); },
     users: g.users,
   };
 }

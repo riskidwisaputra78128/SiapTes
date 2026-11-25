@@ -6,6 +6,7 @@ import crypto from 'node:crypto';
 import { handle, readBody, query, send, httpError } from './_lib/http.js';
 import { requireUser } from './_lib/auth.js';
 import { getDB } from './_lib/db.js';
+import { avatarMap, avatarUrl } from './_lib/avatar.js';
 import { pickQuestions, DIFFS } from './_lib/pick.js';
 
 const CATS = ['campuran', 'twk', 'tiu', 'tkp', 'ojk', 'bi', 'bumn', 'telkom', 'keuangan', 'english', 'isu'];
@@ -73,12 +74,13 @@ function standings(room, now, tl) {
   return list.sort((a, b) => b.score - a.score);
 }
 
-function publicView(room, me, now) {
+function publicView(room, me, now, avs = {}) {
   const tl = timeline(room, now);
   const players = standings(room, now, tl).map((p, rank) => {
     const cur = tl.idx >= 0 ? p.answers?.[tl.idx] : null;
     return {
       uid: p.uid === me ? p.uid : undefined, name: p.name, isBot: !!p.isBot, isHost: p.uid === room.host.uid, me: p.uid === me,
+      avatar: p.isBot ? null : avatarUrl(p.uid, avs),
       score: p.score || 0, correct: p.correct || 0, left: !!p.left, rank: rank + 1,
       answered: !!cur,
       last: tl.phase === 'reveal' || tl.phase === 'finished' ? (cur ? { ok: cur.ok, pts: cur.pts, ms: cur.ms } : null) : undefined,
@@ -141,7 +143,7 @@ export default handle(['GET', 'POST'], async (req, res) => {
       await db.updateRoom(code, r => (r && r.status === 'playing' ? { room: { ...r, status: 'finished', finishedAt: now } } : { result: null }));
       room.status = 'finished';
     }
-    return send(res, 200, publicView(room, user.uid, now));
+    return send(res, 200, publicView(room, user.uid, now, await avatarMap(db)));
   }
 
   const b = await readBody(req);

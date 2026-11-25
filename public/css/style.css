@@ -781,3 +781,34 @@ button.dp { cursor: pointer; }
 .gen-btn .gi { font-size: 26px; }
 .gen-btn b { display: block; font-size: 15px; }
 .gen-btn small { display: block; font-size: 12px; opacity: .85; }
+
+/* ───── Gambar: kartu materi, berita, foto profil ───── */
+.cat-card.has-img { padding: 0 0 12px; gap: 6px; }
+.cat-card.has-img > b, .cat-card.has-img > small, .cat-card.has-img > .cat-count { padding: 0 12px; }
+.cat-img { display: block; position: relative; aspect-ratio: 2 / 1; overflow: hidden; border-radius: inherit; border-bottom-left-radius: 0; border-bottom-right-radius: 0; margin-bottom: 4px; }
+.cat-img img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .5s ease; }
+.cat-card.has-img:hover .cat-img img { transform: scale(1.06); }
+.news-item { align-items: flex-start; color: inherit; text-decoration: none; }
+.news-item .nt { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; font-weight: 600; font-size: 14px; line-height: 1.4; }
+.news-item:hover .nt { color: var(--cyan); }
+.news-thumb { position: relative; flex: none; width: 92px; height: 64px; border-radius: 12px; overflow: hidden; background: var(--w8); box-shadow: 0 0 0 1px var(--line); }
+.news-thumb > img:first-child { width: 100%; height: 100%; object-fit: cover; display: block; }
+.news-thumb .fav { position: absolute; right: 5px; bottom: 5px; width: 22px; height: 22px; border-radius: 6px; background: #fff; padding: 2px; box-shadow: 0 2px 6px rgba(0,0,0,.3); }
+@media (min-width: 640px) { .news-thumb { width: 112px; height: 72px; } }
+.av { overflow: hidden; }
+.av img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 50%; z-index: 1; }
+.av em { font-style: normal; }
+.av.lg .live-dot { z-index: 2; }
+.av.md { width: 34px; height: 34px; font-size: 14px; margin: 0; }
+.av.bot { background: var(--w9); font-size: 16px; }
+.av.pod { width: 46px; height: 46px; font-size: 18px; margin: 0 auto 6px; display: grid; }
+.podium .p1 .av.pod { width: 58px; height: 58px; font-size: 22px; box-shadow: 0 0 0 3px #fbbf24; }
+.av.xl { width: 84px; height: 84px; font-size: 34px; margin: 0; border-width: 3px; }
+.av.lg { overflow: visible; } .av.lg img { border-radius: 50%; }
+.prof-photo { flex: none; }
+.prof-av { position: relative; border-radius: 50%; padding: 0; box-shadow: 0 0 0 3px rgba(129,140,248,.35), 0 10px 30px -10px rgba(0,0,0,.5); }
+.prof-cam { position: absolute; right: -2px; bottom: -2px; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--grad); font-size: 14px; border: 2px solid var(--bg); z-index: 3; }
+.avatar-btn { overflow: hidden; }
+.avatar-btn.has-photo { padding: 0; }
+.avatar-btn img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.dp .av { flex: none; }

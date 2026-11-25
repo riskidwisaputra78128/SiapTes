@@ -1,5 +1,5 @@
 import { api, session } from './api.js';
-import { $, $$, esc, fmt, countUp, timeAgo } from './ui.js';
+import { $, $$, esc, fmt, countUp, timeAgo, avatar } from './ui.js';
 import { catByKey, modeByKey, diffByKey } from './data.js';
 
 let chartLib;
@@ -133,10 +133,10 @@ export async function renderLeaderboard(app) {
     const d = await api('/leaderboard?period=' + period);
     if (!d.top.length) { box.innerHTML = '<div class="empty"><div style="font-size:44px">🏆</div>Belum ada peserta di periode ini. Jadilah yang pertama!</div>'; return; }
     const t = d.top;
-    const pod = (r, cls) => r ? `<div class="p ${cls}"><div class="nm">${esc(r.name)}</div><div class="block">${cls === 'p1' ? '👑' : cls === 'p2' ? '🥈' : '🥉'}<br>${fmt(r.points)}</div></div>` : '<div></div>';
+    const pod = (r, cls) => r ? `<div class="p ${cls}">${avatar(r, 'pod')}<div class="nm">${esc(r.name)}</div><div class="block">${cls === 'p1' ? '👑' : cls === 'p2' ? '🥈' : '🥉'}<br>${fmt(r.points)}</div></div>` : '<div></div>';
     box.innerHTML = `
       <div class="podium">${pod(t[1], 'p2')}${pod(t[0], 'p1')}${pod(t[2], 'p3')}</div>
-      ${t.map(r => `<div class="lb-row ${r.me ? 'me' : ''}"><span class="rank ${r.rank <= 3 ? 'r' + r.rank : ''}">${r.rank}</span>
+      ${t.map(r => `<div class="lb-row ${r.me ? 'me' : ''}"><span class="rank ${r.rank <= 3 ? 'r' + r.rank : ''}">${r.rank}</span>${avatar(r, 'md')}
         <div style="flex:1;min-width:0"><b>${esc(r.name)}${r.me ? ' (kamu)' : ''}</b><div class="dim">${r.questions} soal · akurasi ${r.accuracy}%</div></div>
         <b style="font-family:var(--num)">${fmt(r.points)}</b></div>`).join('')}
       ${d.mine && d.mine.rank > 20 ? `<div class="lb-row me" style="margin-top:10px"><span class="rank">${d.mine.rank}</span><b style="flex:1">Kamu</b><b>${fmt(d.mine.points)}</b></div>` : ''}
