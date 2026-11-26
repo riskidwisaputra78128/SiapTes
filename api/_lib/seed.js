@@ -1,4 +1,5 @@
 import { SEED_INTERACTIVE } from './seed-interactive.js';
+import { BANK } from './bank/index.js';
 // Bank soal awal (materi stabil). Soal berbasis berita terbaru ditambahkan otomatis oleh /api/generate.
 // Format PG: P(id, kategori, level, soal, [A,B,C,D], indexJawaban, pembahasan)
 // Format Esai: E(id, kategori, level, soal, [poin kunci], jawabanAcuan)
@@ -228,3 +229,5 @@ export const SEED_QUESTIONS = [
     'Tes kepribadian tidak memiliki jawaban benar atau salah; tujuannya memetakan gaya kerja peserta. Inventori seperti EPPS dan PAPI memuat butir berpasangan untuk mengecek konsistensi, sehingga jawaban yang dibuat-buat demi citra ideal akan terlihat tidak konsisten dan membuat profil tidak valid. Selain itu, hasilnya biasanya dicocokkan dengan wawancara dan kebutuhan jabatan, jadi jawaban jujur justru membantu penempatan yang sesuai.'),
 ];
 SEED_QUESTIONS.push(...SEED_INTERACTIVE);
+// bank soal bawaan ±100 soal/kategori (offline, tetap tersedia walau Firebase/AI tidak bisa diakses)
+SEED_QUESTIONS.push(...BANK);

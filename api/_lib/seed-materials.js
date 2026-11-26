@@ -1,3 +1,4 @@
+import { EXTRA_MATERIALS } from './seed-materials-extra.js';
 // Materi Inti (selalu tersedia). Materi harian dari berita dibuat otomatis oleh /api/generate.
 const M = (category, title, summary, sections, keyPoints, glossary, tips) => ({
   id: 'core-' + category, core: true, category, title, summary, sections, keyPoints, glossary, tips,
@@ -133,3 +134,5 @@ export const CORE_MATERIALS = [
     [{ term: 'Panker', def: 'Kecepatan kerja pada Kraepelin (rata-rata jumlah jawaban per kolom).' }, { term: 'Tianker', def: 'Ketelitian kerja: jumlah salah dan terlewat.' }, { term: 'Janker', def: 'Keajegan kerja: selisih naik-turun antarkolom.' }, { term: 'Forced choice', def: 'Format memilih satu dari dua pernyataan (contoh: EPPS).' }, { term: 'Tes proyektif', def: 'Tes yang meminta peserta "memproyeksikan" diri lewat gambar/cerita, mis. Wartegg & DAP.' }],
     ['Latih Kraepelin dengan simulasi di halaman Latihan → Tes Psikologi.', 'Jangan berhenti di satu kolom; lebih baik terus bergerak walau ada yang terlewat.', 'Gambar orang dan pohon secara utuh, proporsional, di tengah kertas.', 'Untuk PAPI/EPPS, bayangkan diri Anda di lingkungan kerja, bukan di rumah.']),
 ];
+// tambahan materi inti (total 30)
+CORE_MATERIALS.push(...EXTRA_MATERIALS);
