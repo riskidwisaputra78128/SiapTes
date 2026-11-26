@@ -8,11 +8,18 @@ import { renderStats, renderLeaderboard } from './stats.js';
 import { renderTech } from './tech.js';
 import { renderMateri, getMaterials } from './materi.js';
 import { renderDuel } from './duel.js';
+import { renderPsikotes } from './psikotes.js';
 import { renderAdminLive } from './admin-live.js';
 import { startPresence, onlineWidget, isHidden, setHidden, presence, refreshPresence } from './presence.js';
-import { applyTheme, currentTheme, openThemePicker, THEMES } from './theme.js';
+import { applyTheme, currentTheme, openThemePicker, THEMES, applyServerDefault } from './theme.js';
 import { mountDock, setDockVisible } from './dock.js';
 import { syncScene, sceneRoute } from './scene.js';
+import { setMood, sfx } from './sound.js';
+
+// suasana musik per halaman
+const MOOD_OF = { '': 'normal', kantor: 'normal', command: 'normal', login: 'normal', teknologi: 'normal', latihan: 'normal',
+  profil: 'calm', materi: 'calm', psikotes: 'calm', evaluasi: 'calm', quiz: 'tense', duel: 'tense', peringkat: 'happy' };
+let lastPath = null;
 
 const app = $('#app');
 const NAV = [
@@ -55,6 +62,10 @@ async function route() {
   const inQuiz = path === 'quiz';
   setDockVisible(path !== 'login' && !inQuiz);
   sceneRoute(path);
+  if (path === 'hasil') setMood((practice.result?.score ?? 0) >= 60 ? 'happy' : 'calm');
+  else setMood(MOOD_OF[path] || 'normal');
+  if (lastPath !== null && lastPath !== path) sfx('nav');
+  lastPath = path;
   chrome(path !== 'login' && !inQuiz && (authed || path !== 'teknologi'), path);
   app.innerHTML = '';
   try {
@@ -69,6 +80,7 @@ async function route() {
       case 'teknologi': renderTech(app); break;
       case 'materi': await renderMateri(app, params); break;
       case 'duel': await renderDuel(app, params); break;
+      case 'psikotes': renderPsikotes(app, params); break;
       case 'command': case 'kantor': await renderAdminLive(app); break;
       default: await renderHome();
     }
@@ -77,6 +89,50 @@ async function route() {
   }
   bindTilt(app);
   app.focus({ preventScroll: true });
+  if (session.loggedIn && !['login', 'quiz', 'duel'].includes(path)) setTimeout(maybeDaily, 700);
+}
+
+/* ───────── Pop-up harian: muncul sekali setelah login pertama tiap hari ───────── */
+let dailyBusy = false;
+async function maybeDaily() {
+  if (dailyBusy || !session.loggedIn) return;
+  const today = new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10);
+  const key = 'sl_daily_' + (session.user?.uid || session.user?.email || 'u');
+  try { if (localStorage.getItem(key) === today) return; } catch { return; }
+  dailyBusy = true;
+  try {
+    const d = (await getInfo())?.daily;
+    if (!d || !session.loggedIn || ['#/login', '#/quiz'].some(h => location.hash.startsWith(h))) return;
+    try { localStorage.setItem(key, today); } catch {}
+    const name = (session.user?.name || '').split(' ')[0];
+    const hour = new Date(Date.now() + 7 * 3600e3).getUTCHours();
+    const greet = hour < 11 ? 'Selamat pagi' : hour < 15 ? 'Selamat siang' : hour < 19 ? 'Selamat sore' : 'Selamat malam';
+    const total = d.materials + d.news + d.questions;
+    const cat = k => catByKey[k]?.ico || '📘';
+    sheet(`
+      <div class="daily">
+        <div class="daily-burst">${total ? '🎁' : '☀️'}</div>
+        <h3 class="h2" style="text-align:center;margin:6px 0 2px">${greet}${name ? ', ' + esc(name) : ''}!</h3>
+        <p class="dim" style="text-align:center;margin:0 0 14px">${total ? 'Ini update terbaru di SiapLolos hari ini:' : 'Belum ada update baru hari ini — saatnya mengulang materi favoritmu.'}</p>
+        <div class="daily-grid">
+          <a href="#/materi" class="glass daily-stat" data-close><b data-n="${d.materials}">0</b><span>📚 Materi baru</span></a>
+          <a href="#/" class="glass daily-stat" data-close><b data-n="${d.news}">0</b><span>🗞️ Isu terkini</span></a>
+          <a href="#/latihan" class="glass daily-stat" data-close><b data-n="${d.questions}">0</b><span>📝 Soal baru</span></a>
+        </div>
+        ${d.materialTitles?.length ? `<div class="daily-list"><div class="dim" style="font-size:12px;font-weight:800;letter-spacing:.06em;margin-bottom:6px">MATERI TERBARU</div>
+          ${d.materialTitles.map(m => `<a href="#/materi?id=${encodeURIComponent(m.id)}" data-close>${cat(m.category)} ${esc(m.title)}</a>`).join('')}</div>` : ''}
+        ${d.newsTitles?.length ? `<div class="daily-list"><div class="dim" style="font-size:12px;font-weight:800;letter-spacing:.06em;margin-bottom:6px">ISU TERKINI</div>
+          ${d.newsTitles.map(t => `<div>• ${esc(t)}</div>`).join('')}</div>` : ''}
+        <div class="row" style="gap:8px;margin-top:14px">
+          <a href="#/latihan" class="btn block" data-close>🚀 Mulai latihan</a>
+          <button class="btn ghost" data-close>Nanti saja</button>
+        </div>
+      </div>`, (el, close) => {
+      import('./sound.js').then(m => m.sfx('notify')).catch(() => {});
+      $$('[data-n]', el).forEach(b => countUp(b, +b.dataset.n));
+      $$('[data-close]', el).forEach(b => b.addEventListener('click', () => close?.()));
+    });
+  } catch (e) { console.warn('daily', e); } finally { dailyBusy = false; }
 }
 
 /* ───────── Auth ───────── */
@@ -323,7 +379,7 @@ async function renderHome() {
       const c = catByKey[m.category] || {};
       const fb = `/img/cat/${catByKey[m.category] ? m.category : 'isu'}.svg`;
       const isToday = isDaily && m.day === new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10);
-      return `<a class="glass mat-mini has-img" href="#/materi?id=${encodeURIComponent(m.id)}">
+      return `<a class="glass mat-mini has-img ${m.basis === 'dasar' ? 'is-dasar' : ''}" href="#/materi?id=${encodeURIComponent(m.id)}">
         <span class="mm-img"><img src="${esc(m.cover || fb)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='${fb}'">
           <span class="mm-cat">${c.ico || '📘'} ${esc(c.name || '')}</span>${isToday ? '<span class="mm-new">BARU</span>' : ''}</span>
         <span class="mm-body"><b>${esc(m.title)}</b>${m.highlight ? `<span class="mm-hl">✨ ${esc(m.highlight)}</span>` : ''}</span></a>`;
@@ -521,10 +577,14 @@ function renderProfile() {
       <p class="muted" style="margin:6px 0 12px">Buat soal & materi baru dari berita hari ini (Gemini). Keduanya juga berjalan otomatis setiap hari pukul 06.00 WIB.</p>
       <div id="sysStatus" class="dim">Memuat status…</div>
       <div class="gen-pick">
+        <div class="row between wrap" style="gap:6px"><b>🧭 Basis soal & materi</b><span class="dim" id="genBasisInfo"></span></div>
+        <div class="pill-group" id="genBasis" style="margin:8px 0 12px">
+          <button class="pill" data-gb="campuran">🔀 Campuran</button><button class="pill" data-gb="dasar">📚 Pengetahuan dasar</button><button class="pill" data-gb="terkini">🗞️ Update terkini</button>
+        </div>
         <div class="row between wrap" style="gap:6px"><b>🎯 Topik yang di-generate</b><span class="dim" id="genPickInfo"></span></div>
         <div class="pill-group" id="genCats" style="margin-top:8px">
           <button class="pill" data-gc="auto">🔄 Otomatis</button>
-          ${CATEGORIES.slice(1).map(c => `<button class="pill" data-gc="${c.key}">${c.ico} ${c.name.replace(/ \(.*\)/, '').replace(' & Berita', '').replace(' & Regulasi Keuangan', '').replace(' & Moneter', '').replace(' & AKHLAK', '').replace(' & Digital', '').replace(' & Keuangan', '')}${['tiu', 'tkp', 'english'].includes(c.key) ? ' <small class="gc-tag">soal saja</small>' : ''}</button>`).join('')}
+          ${CATEGORIES.slice(1).map(c => `<button class="pill" data-gc="${c.key}">${c.ico} ${c.name.replace(/ \(.*\)/, '').replace(' & Berita', '').replace(' & Regulasi Keuangan', '').replace(' & Moneter', '').replace(' & AKHLAK', '').replace(' & Digital', '').replace(' & Keuangan', '')}</button>`).join('')}
         </div>
       </div>
       <div class="gen-grid">
@@ -533,6 +593,12 @@ function renderProfile() {
       </div>
       <p class="dim" style="margin:8px 0 0">💡 Jalankan satu per satu, beri jeda ±1 menit agar kuota Gemini tidak cepat habis.</p>
       <pre id="genOut" class="dim" style="white-space:pre-wrap;margin:12px 0 0"></pre><div id="genLinks"></div>
+    </div>
+    <div class="glass card">
+      <h2 class="h2">🎨 Tema default pengguna</h2>
+      <p class="muted" style="margin:6px 0 10px">Tema yang dilihat pengguna baru & pengguna yang belum memilih tema sendiri. Pengguna tetap bisa mengganti tema lewat tombol 🎨.</p>
+      <div class="theme-grid admin-theme" id="defTheme">${THEMES.map(t => `<button class="theme-opt" data-dt="${t.key}"><div class="theme-prev" style="background:${t.prev.bg}"><span class="card-mini" style="background:${t.prev.card}"></span><i style="width:40%;background:${t.prev.a}"></i><i style="width:25%;background:${t.prev.b}"></i></div><div class="theme-meta"><b>${t.ico} ${t.name}</b></div></button>`).join('')}</div>
+      <div class="dim" id="defThemeInfo" style="margin-top:8px"></div>
     </div>
     <div class="glass card">
       <h2 class="h2">🧹 Hapus soal massal</h2>
@@ -595,6 +661,14 @@ function renderProfile() {
       $$('[data-fb]').forEach(b => (b.onclick = async () => { b.disabled = true; await api('/presence?op=feedback', { method: 'POST', body: { action: 'done', id: b.dataset.fb, done: b.dataset.done === '1' } }).catch(e => toast(e.message, 'err')); loadFb(); }));
     }).catch(e => { $('#fbList').innerHTML = `<div class="empty">${esc(e.message)}</div>`; });
     loadFb();
+    // ── Tema default ──
+    const paintDef = k => { $$('#defTheme [data-dt]').forEach(b => b.classList.toggle('on', b.dataset.dt === k)); const t = THEMES.find(x => x.key === k); $('#defThemeInfo').textContent = t ? `Default saat ini: ${t.ico} ${t.name}` : ''; };
+    getInfo(true).then(d => paintDef(d?.settings?.defaultTheme || 'dark')).catch(() => {});
+    $$('#defTheme [data-dt]').forEach(b => (b.onclick = async () => {
+      const k = b.dataset.dt; b.disabled = true;
+      try { await api('/presence?op=settings', { method: 'POST', body: { defaultTheme: k } }); paintDef(k); applyServerDefault(k); toast('Tema default disimpan untuk semua pengguna', 'ok'); }
+      catch (e) { toast(e.message, 'err'); } finally { b.disabled = false; }
+    }));
     // ── Hapus soal massal ──
     const pN = () => +$('#purgeN').value;
     $('#purgeN').oninput = () => { $('#purgeNT').textContent = pN() + ' soal'; $('#purgeOut').innerHTML = ''; };
@@ -629,8 +703,7 @@ function renderProfile() {
     let pickCats = (() => { try { return JSON.parse(localStorage.getItem('sl_gen_cats') || '[]'); } catch { return []; } })();
     const paintPick = () => {
       $$('#genCats [data-gc]').forEach(b => b.classList.toggle('on', b.dataset.gc === 'auto' ? !pickCats.length : pickCats.includes(b.dataset.gc)));
-      const ev = pickCats.filter(c => !NEWS.includes(c));
-      $('#genPickInfo').textContent = !pickCats.length ? 'rotasi harian: Isu + 3 topik berita' : `${pickCats.length}/4 dipilih${ev.length ? ' · TIU/TKP/Inggris hanya untuk Generate Soal' : ''}`;
+      $('#genPickInfo').textContent = !pickCats.length ? 'rotasi harian: Isu + 3 topik berita' : `${pickCats.length}/4 dipilih`;
       try { localStorage.setItem('sl_gen_cats', JSON.stringify(pickCats)); } catch {}
     };
     $$('#genCats [data-gc]').forEach(b => (b.onclick = () => {
@@ -642,6 +715,12 @@ function renderProfile() {
       paintPick();
     }));
     paintPick();
+    // basis: campuran | dasar | terkini (tersimpan di perangkat admin)
+    let basis = localStorage.getItem('sl_gen_basis') || 'campuran';
+    const BINFO = { campuran: 'soal 7 konsep + 3 konteks berita · materi selang-seling modul & berita', dasar: 'dari kurikulum/modul pengetahuan, tanpa berita', terkini: 'dari berita terbaru (tetap fokus konsep)' };
+    const paintBasis = () => { $$('#genBasis [data-gb]').forEach(b => b.classList.toggle('on', b.dataset.gb === basis)); $('#genBasisInfo').textContent = BINFO[basis] + (basis === 'terkini' ? ' · TIU/TKP/Inggris/Psikologi otomatis memakai basis dasar' : ''); };
+    $$('#genBasis [data-gb]').forEach(b => (b.onclick = () => { basis = b.dataset.gb; try { localStorage.setItem('sl_gen_basis', basis); } catch {} paintBasis(); }));
+    paintBasis();
     const genBtns = $$('[data-gen]');
     genBtns.forEach(b => (b.onclick = async () => {
       const type = b.dataset.gen, label = b.innerHTML;
@@ -649,9 +728,8 @@ function renderProfile() {
       b.innerHTML = `<span class="spinner"></span><span><b>${type === 'soal' ? 'Membuat soal…' : 'Membuat materi…'}</b><small>bisa sampai ±1 menit</small></span>`;
       $('#genLinks').innerHTML = '';
       try {
-        const cats = type === 'materi' ? pickCats.filter(c => NEWS.includes(c)) : pickCats;
-        if (type === 'materi' && pickCats.length && !cats.length) throw new Error('Topik yang dipilih (TIU/TKP/Inggris) tidak punya materi berita. Tambahkan topik berita atau pilih Otomatis.');
-        const r = await api('/generate?type=' + type + (cats.length ? '&cats=' + cats.join(',') : ''), { method: 'POST' });
+        const cats = pickCats;
+        const r = await api('/generate?type=' + type + '&basis=' + basis + (cats.length ? '&cats=' + cats.join(',') : ''), { method: 'POST' });
         $('#genOut').textContent = r.summary.map(s => `${catByKey[s.cat]?.name || s.cat}: ${type === 'soal' ? `${s.saved} soal` : `${s.material || 0} materi`}${s.reason ? ' — ' + s.reason : ''}`).join('\n');
         if (r.message) { toast(r.message, 'err'); $('#genOut').textContent = '⚠️ ' + r.message + '\n\n' + $('#genOut').textContent; }
         else if (type === 'soal') { toast(`${r.total} soal baru ditambahkan`, 'ok'); if (r.total) $('#genLinks').innerHTML = '<a class="btn ghost sm" href="#/latihan?fresh=1&category=' + (cats[0] || 'isu') + '" style="margin-top:10px">🎯 Coba soal terbaru</a>'; }
@@ -669,6 +747,8 @@ window.addEventListener('beforeunload', e => { if (practice.active) { e.preventD
 applyTheme(currentTheme(), { save: false });
 mountDock();
 syncScene();
+// tema default dari admin (berlaku bila pengguna belum memilih tema sendiri)
+getInfo().then(d => applyServerDefault(d?.settings?.defaultTheme)).catch(() => {});
 if (session.loggedIn) { startPresence(); syncAvatar(); }
 window.addEventListener('hashchange', () => { if (session.loggedIn) startPresence(); });
 $('#themeBtn').onclick = openThemePicker;

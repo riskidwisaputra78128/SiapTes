@@ -17,6 +17,7 @@ export function avatar(u, cls = '', extra = '') {
 export function toast(msg, type = '') {
   const el = document.createElement('div');
   el.className = `toast ${type}`;
+  import('./sound.js').then(m => m.sfx(type === 'err' ? 'wrong' : 'pop')).catch(() => {});
   el.textContent = msg;
   $('#toasts').appendChild(el);
   setTimeout(() => { el.style.opacity = '0'; el.style.transition = '.3s'; setTimeout(() => el.remove(), 300); }, 3200);
@@ -108,8 +109,10 @@ export function confetti(count = 90, origin) {
 export function sheet(html, onMount) {
   const bd = document.createElement('div'); bd.className = 'sheet-backdrop';
   const sh = document.createElement('div'); sh.className = 'sheet glass'; sh.innerHTML = html;
-  const close = () => { bd.remove(); sh.remove(); };
+  import('./sound.js').then(m => m.sfx('pop')).catch(() => {});
+  const close = () => { bd.remove(); sh.remove(); removeEventListener('hashchange', close); };
   bd.onclick = close;
+  addEventListener('hashchange', close);   // pindah halaman → sheet ikut tertutup
   document.body.append(bd, sh);
   onMount?.(sh, close);
   return close;

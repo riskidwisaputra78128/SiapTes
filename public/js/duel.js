@@ -348,6 +348,7 @@ function renderRoom(app, code) {
       </div>`;
     bindCommon();
     setTimeout(() => sfx(meP?.rank === 1 ? 'win' : 'lose'), 200);
+    import('./sound.js').then(m => m.setMood(meP?.rank === 1 ? 'happy' : 'calm')).catch(() => {});
     if (meP?.rank === 1) setTimeout(() => confetti(140), 300);
     saveResult(meP);
   }

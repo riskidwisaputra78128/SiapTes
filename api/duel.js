@@ -9,7 +9,7 @@ import { getDB } from './_lib/db.js';
 import { avatarMap, avatarUrl } from './_lib/avatar.js';
 import { pickQuestions, DIFFS } from './_lib/pick.js';
 
-const CATS = ['campuran', 'twk', 'tiu', 'tkp', 'ojk', 'bi', 'bumn', 'telkom', 'keuangan', 'english', 'isu'];
+const CATS = ['campuran', 'twk', 'tiu', 'tkp', 'ojk', 'bi', 'bumn', 'telkom', 'keuangan', 'english', 'isu', 'psikologi'];
 const PER_Q = { easy: 20, normal: 17, hard: 14, prof: 12, all: 17 }; // detik per soal
 const REVEAL = 4;       // detik jeda pembahasan
 const COUNTDOWN = 5;    // detik hitung mundur

@@ -7,7 +7,7 @@ import { imageForNews } from './_lib/ogimage.js';
 import { SEED_QUESTIONS } from './_lib/seed.js';
 
 const CACHE_MS = 3 * 3600 * 1000;
-const CATS = ['twk', 'tiu', 'tkp', 'ojk', 'bi', 'bumn', 'telkom', 'keuangan', 'english', 'isu'];
+const CATS = ['twk', 'tiu', 'tkp', 'ojk', 'bi', 'bumn', 'telkom', 'keuangan', 'english', 'isu', 'psikologi'];
 
 async function questionBank(db) {
   const seedBy = {};
@@ -55,13 +55,27 @@ export default handle(['GET'], async (req, res) => {
     }));
     if (items.length) { news = { at: Date.now(), items }; db.setMeta('news3', news).catch(() => {}); }
   }
-  const [last, bank] = await Promise.all([db.getMeta('lastGenerate').catch(() => null), questionBank(db)]);
+  const [last, bank, settings, mats] = await Promise.all([db.getMeta('lastGenerate').catch(() => null), questionBank(db), db.getMeta('settings').catch(() => null), db.listMaterials(90).catch(() => [])]);
+  // ringkasan update hari ini (untuk pop-up harian setelah login)
+  const sod = startOfDayWIB(Date.now());
+  const newMats = mats.filter(m => m.title && m.createdAt >= sod);
+  const daily = {
+    day: new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10),
+    materials: newMats.length,
+    materialTitles: newMats.slice(0, 3).map(m => ({ id: m.id, title: m.title, category: m.category })),
+    news: (news?.items || []).filter(i => i.date >= sod - 6 * 3600e3).length,
+    newsTitles: (news?.items || []).slice(0, 3).map(i => i.title),
+    questions: bank.today,
+    sinceMs: sod,
+  };
   const models = new URL(req.url, 'http://x').searchParams.get('fresh') && aiEnabled() ? await aiModelsInfo().catch(() => null) : undefined;
   res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=60');
   send(res, 200, {
     items: (news?.items || []).slice(0, 10),
     updatedAt: news?.at || null,
     bank,
+    daily,
+    settings: { defaultTheme: settings?.defaultTheme || 'dark' },
     status: { firebase: firebaseEnabled(), ai: aiEnabled(), generatedQuestions: bank.generated, lastGenerate: last, models },
   });
 });

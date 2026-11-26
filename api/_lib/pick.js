@@ -57,5 +57,14 @@ export async function pickQuestions({ category = 'campuran', difficulty = 'all',
       filled = picked.some(q => q.difficulty !== difficulty);
     }
   }
+  // Interaktif: ratakan variasi cara mengerjakan (urutan, cocokkan, isi rumpang, benar/salah, dst.)
+  if (type === 'interactive' && picked.length > 1) {
+    const cands = [...picked, ...order(exact), ...order(pool)];
+    const ids = new Set(), groups = new Map();
+    for (const q of cands) { if (ids.has(q.id)) continue; ids.add(q.id); const k = q.kind || 'order'; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(q); }
+    const lanes = shuffle([...groups.values()]), out = [];
+    while (out.length < limit && lanes.some(l => l.length)) for (const l of lanes) { if (l.length && out.length < limit) out.push(l.shift()); }
+    picked = out;
+  }
   return { questions: shuffle(picked).map(shuffleOptions), available: exact.length, filled };
 }

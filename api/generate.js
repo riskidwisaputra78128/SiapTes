@@ -8,6 +8,7 @@ import { getDB } from './_lib/db.js';
 import { aiEnabled, geminiJSON } from './_lib/ai.js';
 import { NEWS_TOPICS, fetchHeadlines, fetchBackup } from './_lib/news.js';
 import { dayKey } from './_lib/http.js';
+import { KNOW, KNOW_CATS, pickSubs } from './_lib/curriculum.js';
 
 const CAT_LABEL = {
   bi: 'Bank Indonesia, kebijakan moneter & sistem pembayaran',
@@ -20,18 +21,28 @@ const CAT_LABEL = {
   tiu: 'Tes Intelegensia Umum (verbal, numerik, logika)',
   tkp: 'Tes Karakteristik Pribadi (perilaku kerja)',
   english: 'Bahasa Inggris untuk tes kerja (grammar, vocabulary, reading)',
+  psikologi: 'Tes Psikologi / psikotes rekrutmen kerja',
 };
-// Topik tanpa berita: soal dibuat dari kisi-kisi resmi, sub-topik diacak tiap generate agar bervariasi
-const EVERGREEN = {
-  tiu: { sub: ['sinonim', 'antonim', 'analogi kata', 'silogisme/penarikan kesimpulan', 'deret angka', 'deret huruf', 'aritmetika sosial (untung, rugi, diskon)', 'perbandingan senilai & berbalik nilai', 'soal cerita kecepatan-jarak-waktu', 'pecahan & persen', 'logika analitis (posisi/urutan duduk)', 'pengelompokan kata'],
-    rule: 'Soal TIU gaya SKD CPNS/BUMN. Untuk numerik, pastikan hitungan benar dan cantumkan langkah ringkas di "explanation". Hindari soal figural/gambar.' },
-  tkp: { sub: ['pelayanan publik', 'jejaring kerja', 'sosial budaya', 'teknologi informasi & komunikasi', 'profesionalisme', 'anti radikalisme', 'integritas & anti korupsi', 'kerja sama tim', 'inisiatif & semangat berprestasi', 'adaptasi perubahan'],
-    rule: 'Soal TKP gaya SKD: studi kasus situasi kerja, 4 opsi respons yang semuanya terdengar wajar. "answer" = respons PALING ideal (proaktif, solutif, berintegritas, berorientasi layanan). "explanation" jelaskan kenapa paling ideal dan kenapa opsi lain kurang. Tidak ada esai menghafal.' },
-  english: { sub: ['tenses', 'subject-verb agreement', 'passive voice', 'conditional sentences', 'vocabulary in context (banking/finance)', 'synonyms', 'prepositions', 'reading comprehension (short business email)', 'error recognition', 'gerund & infinitive'],
-    rule: 'Soal Bahasa Inggris gaya tes rekrutmen bank/BUMN/OJK (mirip TOEIC/TOEFL ITP). Pertanyaan & opsi dalam bahasa Inggris, "explanation" dalam bahasa Indonesia. Untuk reading, sertakan teks pendek (3-5 kalimat) di dalam "question".' },
+// Jenis soal interaktif yang bisa dibuat AI (dipilih acak 2 per generate agar bervariasi)
+const IX_KINDS = ['match', 'order', 'fill', 'tf', 'odd'];
+const IX_SPEC = {
+  match: '- Interaktif kind "match": 4 pasangan {"a","b"} yang saling cocok (mis. lembaga ↔ peran, istilah ↔ arti); setiap "b" unik.',
+  order: '- Interaktif kind "order": 4-6 langkah/kronologi/proses dalam URUTAN YANG BENAR di "items"; urutannya jelas, tidak ambigu.',
+  fill: '- Interaktif kind "fill" (isi rumpang): "text" berisi 1-2 kalimat dengan 2-3 bagian kosong ditulis "___"; "blanks" = jawaban tiap "___" sesuai urutan; "extras" = 2-3 kata pengecoh.',
+  tf: '- Interaktif kind "tf" (benar/salah): "statements" berisi 5 pernyataan {"t":"...","v":true/false}, campuran benar & salah, faktanya pasti.',
+  odd: '- Interaktif kind "odd" (cari yang berbeda): "items" berisi 5 istilah, "odd" = index (0-4) satu item yang TIDAK sekelompok; jelaskan kelompoknya di "explanation".',
 };
+const IX_JSON = {
+  match: '{"type":"interactive","kind":"match","difficulty":"normal","question":"Cocokkan ...","pairs":[{"a":"...","b":"..."}],"explanation":"..."}',
+  order: '{"type":"interactive","kind":"order","difficulty":"hard","question":"Urutkan ...","items":["...","...","...","..."],"explanation":"..."}',
+  fill: '{"type":"interactive","kind":"fill","difficulty":"normal","question":"Lengkapi kalimat berikut.","text":"... ___ ... ___ ...","blanks":["...","..."],"extras":["...","..."],"explanation":"..."}',
+  tf: '{"type":"interactive","kind":"tf","difficulty":"easy","question":"Tentukan benar atau salah.","statements":[{"t":"...","v":true},{"t":"...","v":false}],"explanation":"..."}',
+  odd: '{"type":"interactive","kind":"odd","difficulty":"normal","question":"Manakah yang tidak sekelompok?","items":["...","...","...","...","..."],"odd":2,"explanation":"..."}',
+};
+const pickIx = () => [...IX_KINDS].sort(() => Math.random() - 0.5).slice(0, 2);
 const DIFFS = ['easy', 'normal', 'hard', 'prof'];
-export const MAX_MATERIALS = 50; // arsip materi harian: maksimal 50, yang terlama dihapus otomatis
+
+export const MAX_MATERIALS = 80; // arsip materi: maksimal 80, yang terlama dihapus otomatis
 
 function authorize(req) {
   const h = req.headers['authorization'] || '';
@@ -62,6 +73,22 @@ function validate(q, cat, headlines) {
       const pairs = (q.pairs || []).map(p => ({ a: String(p?.a || '').trim(), b: String(p?.b || '').trim() })).filter(p => p.a && p.b).slice(0, 5);
       if (pairs.length < 3 || new Set(pairs.map(p => p.b)).size !== pairs.length) return null;
       return { ...base, type: 'interactive', kind: 'match', pairs, id: id(cat, base.question) };
+    }
+    if (q.kind === 'fill') {
+      const text = String(q.text || '').trim(); const blanks = strs(q.blanks).slice(0, 4); const extras = strs(q.extras).slice(0, 4);
+      const holes = (text.match(/_{3,}/g) || []).length;
+      if (!text || holes < 1 || holes !== blanks.length) return null;
+      return { ...base, type: 'interactive', kind: 'fill', text: text.replace(/_{3,}/g, '___'), blanks, extras: extras.filter(x => !blanks.includes(x)), id: id(cat, base.question + text) };
+    }
+    if (q.kind === 'tf') {
+      const statements = (q.statements || []).map(x => ({ t: String(x?.t || x?.text || '').trim(), v: x?.v === true || x?.v === 'true' || x?.value === true })).filter(x => x.t).slice(0, 6);
+      if (statements.length < 3 || statements.every(x => x.v) || statements.every(x => !x.v)) return null;
+      return { ...base, type: 'interactive', kind: 'tf', statements, id: id(cat, base.question + statements[0].t) };
+    }
+    if (q.kind === 'odd') {
+      const items = strs(q.items).slice(0, 6); const odd = Number(q.odd);
+      if (items.length < 4 || new Set(items).size !== items.length || !(odd >= 0 && odd < items.length)) return null;
+      return { ...base, type: 'interactive', kind: 'odd', items, odd, id: id(cat, base.question + items.join()) };
     }
     return null;
   }
@@ -113,6 +140,10 @@ Format JSON:
  "glossary":[{"term":"istilah","def":"definisi singkat"}],          // 3-5
  "tips":["tips menjawab soal terkait topik ini"],                  // 2-3
  "sourceIndexes":[0,1]}`, { deadline });
+  return buildMaterial(out, cat, headlines, pics);
+}
+
+function buildMaterial(out, cat, headlines, pics = [], extra = {}) {
   const str = v => String(v || '').trim();
   const sections = (out.sections || []).map(x => ({ heading: str(x.heading), body: str(x.body) })).filter(x => x.heading && x.body).slice(0, 5);
   if (!str(out.title) || sections.length < 2) return null;
@@ -130,7 +161,7 @@ Format JSON:
     return { q: str(x.q || x.question), options, answer: a, why: str(x.why || x.explanation) };
   }).filter(x => x.q && x.options.length >= 2 && x.answer >= 0 && x.answer < x.options.length).slice(0, 3);
   // Gambar: foto dari berita sumber (ANTARA/CNBC) + berita bergambar lain dengan topik sama
-  const srcObjs = sources.length ? sources : headlines.slice(0, 3).map(h => ({ title: h.title, link: h.link, publisher: h.source, date: h.date, image: h.image || null }));
+  const srcObjs = !headlines.length ? [] : sources.length ? sources : headlines.slice(0, 3).map(h => ({ title: h.title, link: h.link, publisher: h.source, date: h.date, image: h.image || null }));
   const seenImg = new Set();
   const images = [...headlines.filter(h => h.image), ...pics.filter(h => h.image)]
     .filter(h => (seenImg.has(h.image) ? false : seenImg.add(h.image)))
@@ -143,39 +174,85 @@ Format JSON:
     glossary: (out.glossary || []).map(g => ({ term: str(g.term), def: str(g.def) })).filter(g => g.term && g.def).slice(0, 6),
     tips: (out.tips || []).map(str).filter(Boolean).slice(0, 4),
     sources: srcObjs, stats, flow, quiz, images, cover: images[0]?.url || null,
-    readMin: Math.max(2, Math.round(words / 180)), createdAt: Date.now(), generated: true,
+    readMin: Math.max(2, Math.round(words / 180)), createdAt: Date.now(), generated: true, basis: 'terkini', ...extra,
   };
 }
 
-// type: 'soal' | 'materi' | 'all'
-async function generateEvergreen(cat, T0, type) {
-  if (type === 'materi') return { cat, saved: 0, material: 0, headlines: [], reason: 'materi harian hanya untuk topik berita (pakai Generate Soal)' };
-  const E = EVERGREEN[cat];
-  const subs = [...E.sub].sort(() => Math.random() - 0.5).slice(0, 5);
-  const out = await geminiJSON(`Kamu penyusun soal tes seleksi kerja Indonesia (CPNS SKD, BUMN/Rekrutmen Bersama, OJK, Bank Indonesia PCPM, Telkom).
+// ───── Basis "dasar": soal & materi dari kurikulum pengetahuan (tanpa berita) ─────
+async function generateKnow(cat, T0, deadlineMs = 55000) {
+  const K = KNOW[cat]; const subs = pickSubs(cat, 5); const ix = pickIx();
+  const out = await geminiJSON(`Kamu penyusun soal tes seleksi kerja Indonesia (CPNS SKD, BUMN/Rekrutmen Bersama, OJK, Bank Indonesia PCPM, Telkom, psikotes).
 Topik: ${CAT_LABEL[cat]}. Sub-topik untuk sesi ini: ${subs.join(', ')}. Kode variasi: ${Date.now().toString(36)} (buat soal baru yang berbeda dari biasanya).
+TUJUAN: membangun pengetahuan dasar yang kokoh agar peserta mudah mengerjakan tes. Gunakan hanya pengetahuan yang mapan & pasti benar (undang-undang, buku teks, ketentuan resmi, kisi-kisi tes). Jangan mengarang angka/tanggal.
 
 Buat 10 soal: 8 pilihan ganda (type "pg") dan 2 soal interaktif (type "interactive").
 Aturan:
-- ${E.rule}
+- ${K.rule}
 - Sebar tingkat kesulitan: easy, normal, hard, prof.
 - Pilihan ganda: tepat 4 opsi tanpa huruf di depan, satu jawaban benar, pengecoh masuk akal, JANGAN pakai "semua benar"/"semua salah".
-- "explanation": 1-3 kalimat.
-- Interaktif #1 kind "match": 4 pasangan {"a","b"} (mis. kata ↔ sinonim, situasi ↔ sikap ideal); setiap "b" unik.
-- Interaktif #2 kind "order": 4-6 item dalam URUTAN YANG BENAR di "items" (mis. deret dari kecil ke besar, langkah penyelesaian masalah), urutannya jelas.
+- "explanation": 1-3 kalimat (sebut dasar hukum/konsep/rumusnya).
+${ix.map(k => IX_SPEC[k]).join('\n')}
 Format JSON:
 {"questions":[{"type":"pg","difficulty":"normal","question":"...","options":["...","...","...","..."],"answer":0,"explanation":"..."},
-{"type":"interactive","kind":"match","difficulty":"normal","question":"Cocokkan ...","pairs":[{"a":"...","b":"..."}],"explanation":"..."},
-{"type":"interactive","kind":"order","difficulty":"hard","question":"Urutkan ...","items":["...","...","...","..."],"explanation":"..."}]}`, { deadline: T0 + 55000 });
+${ix.map(k => IX_JSON[k]).join(',\n')}]}`, { deadline: T0 + deadlineMs });
   const list = Array.isArray(out) ? out : out.questions || out.soal || out.items || [];
   const qs = list.map(q => validate(q, cat, [])).filter(Boolean);
-  const db = await getDB();
-  const saved = qs.length ? await db.addQuestions(qs) : 0;
-  return { cat, saved, material: 0, headlines: [], reason: saved ? '' : list.length ? 'format soal dari AI tidak sesuai' : 'AI tidak mengirim soal' };
+  const saved = qs.length ? await (await getDB()).addQuestions(qs) : 0;
+  return { saved, reason: saved ? '' : list.length ? 'format soal dari AI tidak sesuai' : 'AI tidak mengirim soal' };
 }
 
-async function generateFor(cat, T0, type = 'all') {
-  if (!NEWS_TOPICS[cat]) return generateEvergreen(cat, T0, type);
+async function materialDasar(cat, deadline) {
+  // pilih sub-topik yang belum lama dibahas (riwayat disimpan di meta)
+  const db = await getDB();
+  const hist = (await db.getMeta('matTopics').catch(() => null)) || {};
+  const done = hist[cat] || [];
+  const pool = KNOW[cat].sub.filter(x => !done.includes(x));
+  const topic = (pool.length ? pool : KNOW[cat].sub)[Math.floor(Math.random() * (pool.length || KNOW[cat].sub.length))];
+  const out = await geminiJSON(`Kamu mentor persiapan tes seleksi kerja Indonesia (CPNS, BUMN, OJK, Bank Indonesia, Telkom, psikotes).
+Topik: ${CAT_LABEL[cat]}. Sub-topik modul ini: "${topic}".
+
+Tulis SATU modul belajar PENGETAHUAN DASAR berbahasa Indonesia (seperti ringkasan buku teks/modul kuliah/bahan ajar resmi), fokus membangun pemahaman agar mudah mengerjakan soal tes.
+Aturan:
+- Gunakan hanya pengetahuan mapan yang pasti benar: undang-undang & peraturan resmi, definisi buku teks, teori yang diakui, kisi-kisi tes. JANGAN mengarang angka, tanggal, nomor pasal, judul buku, atau kutipan yang tidak kamu yakini.
+- Gaya ringkas, jelas, banyak contoh; teks pendek, utamakan poin, alur, dan istilah (akan ditampilkan sebagai visual).
+- "refs": 2-4 rujukan untuk dipelajari lebih lanjut, HANYA yang kamu yakin ada (mis. nama undang-undang lengkap dengan nomor & tahun, situs resmi lembaga seperti bi.go.id/ojk.go.id/bkn.go.id, atau buku teks klasik terkenal). Tanpa URL palsu.
+Format JSON:
+{"title":"judul menarik maks 80 karakter",
+ "summary":"2-3 kalimat ringkasan",
+ "sections":[{"icon":"1 emoji","heading":"...","body":"2-4 kalimat"}],   // 3-5 bagian: pengertian, dasar hukum/teori, cara kerja/contoh, jebakan soal yang sering muncul
+ "stats":[{"value":"5","unit":"sila","label":"...","icon":"1 emoji"}],   // 0-3 angka penting yang PASTI benar & tetap; kosongkan jika ragu
+ "flow":[{"icon":"1 emoji","title":"maks 4 kata","desc":"1 kalimat"}],   // 3-5 langkah alur/mekanisme/proses
+ "quiz":[{"q":"pertanyaan cek pemahaman","options":["a","b","c","d"],"answer":0,"why":"1 kalimat alasan"}],  // tepat 3 soal
+ "keyPoints":["poin kunci singkat"],                              // 3-5
+ "glossary":[{"term":"istilah","def":"definisi singkat"}],          // 3-6
+ "tips":["tips menjawab soal terkait topik ini"],                  // 2-3
+ "refs":["..."]}`, { deadline });
+  const refs = (out.refs || []).map(x => String(x || '').trim()).filter(Boolean).slice(0, 4);
+  const mat = buildMaterial(out, cat, [], [], { basis: 'dasar', topic, refs, imgTried: true });
+  if (mat) await db.setMeta('matTopics', { ...hist, [cat]: [...done, topic].slice(-Math.max(1, KNOW[cat].sub.length - 2)) }).catch(() => {});
+  return mat;
+}
+
+// basis: 'terkini' (berita) | 'dasar' (kurikulum pengetahuan) | 'campuran'
+async function generateFor(cat, T0, type = 'all', basis = 'campuran', idx = 0) {
+  const hasNews = !!NEWS_TOPICS[cat];
+  const soalDasar = basis === 'dasar' || !hasNews;
+  const matDasar = basis === 'dasar' || !hasNews || (basis === 'campuran' && idx % 2 === 1);
+  // jalur tanpa berita sama sekali
+  if ((type === 'soal' && soalDasar) || (type === 'materi' && matDasar) || (type === 'all' && soalDasar && matDasar)) {
+    const db = await getDB(); let saved = 0, reason = '', mat = null;
+    if (type !== 'materi') ({ saved, reason } = await generateKnow(cat, T0, type === 'soal' ? 55000 : 38000));
+    if (type !== 'soal' && T0 + 56000 - Date.now() > 12000) {
+      mat = type === 'materi' ? await materialDasar(cat, T0 + 55000) : await materialDasar(cat, T0 + 56000).catch(e => { console.error('materi dasar', cat, e.message); return null; });
+      if (mat) { await db.addMaterials([mat]); await db.pruneMaterials(MAX_MATERIALS).catch(() => {}); }
+      if (type === 'materi') reason = mat ? '' : 'AI tidak mengirim materi yang valid';
+    }
+    return { cat, saved, material: mat ? 1 : 0, headlines: [], reason };
+  }
+  return generateNews(cat, T0, type, soalDasar, matDasar);
+}
+
+async function generateNews(cat, T0, type, soalDasar = false, matDasar = false) {
   const lists = await Promise.all(NEWS_TOPICS[cat].map(q => fetchHeadlines(q, 6)));
   const seen = new Set();
   const headlines = lists.flat().filter(h => (seen.has(h.title) ? false : seen.add(h.title))).slice(0, 10);
@@ -188,8 +265,10 @@ async function generateFor(cat, T0, type = 'all') {
 
   const today = new Date().toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', dateStyle: 'long' });
   const db = await getDB();
-  let saved = 0, list = [];
-  if (type !== 'materi') {
+  let saved = 0, list = [], knowReason = '';
+  if (type !== 'materi' && soalDasar) ({ saved, reason: knowReason } = await generateKnow(cat, T0, 38000));
+  else if (type !== 'materi') {
+  const ix = pickIx();
   const out = await geminiJSON(`Kamu penyusun soal tes seleksi kerja Indonesia (CPNS SKD, BUMN/Rekrutmen Bersama, OJK, Bank Indonesia PCPM, Telkom).
 Hari ini ${today}. Topik: ${CAT_LABEL[cat]}.
 
@@ -208,13 +287,11 @@ Aturan:
 - Pilihan ganda: tepat 4 opsi tanpa huruf di depan, satu jawaban benar, opsi pengecoh masuk akal, JANGAN pakai opsi "semua benar"/"semua salah".
 - "explanation": 1-3 kalimat kenapa jawaban benar (sebut dasar hukum/konsepnya; untuk soal konteks terkini boleh sebut beritanya).
 - Esai: pertanyaan analitis, beri "keyPoints" (3-5 poin kunci) dan "modelAnswer" (4-6 kalimat).
-- Interaktif #1 kind "match": 4 pasangan {"a","b"} yang saling cocok (mis. lembaga ↔ peran, istilah ↔ arti); setiap "b" harus unik.
-- Interaktif #2 kind "order": 4-6 langkah/kronologi/proses dalam URUTAN YANG BENAR di "items" (mis. alur kebijakan, tahapan proses), yang urutannya jelas dan tidak ambigu.
+${ix.map(k => IX_SPEC[k]).join('\n')}
 Format JSON:
 {"questions":[{"type":"pg","difficulty":"normal","question":"...","options":["...","...","...","..."],"answer":0,"explanation":"...","sourceIndex":0},
 {"type":"essay","difficulty":"hard","question":"...","keyPoints":["..."],"modelAnswer":"...","explanation":"...","sourceIndex":1},
-{"type":"interactive","kind":"match","difficulty":"normal","question":"Cocokkan ...","pairs":[{"a":"...","b":"..."}],"explanation":"...","sourceIndex":2},
-{"type":"interactive","kind":"order","difficulty":"hard","question":"Urutkan ...","items":["langkah 1","langkah 2","langkah 3","langkah 4"],"explanation":"...","sourceIndex":3}]}`, { deadline: T0 + (type === 'soal' ? 55000 : 40000) });
+${ix.map(k => IX_JSON[k]).join(',\n')}]}`, { deadline: T0 + (type === 'soal' ? 55000 : 40000) });
 
   list = Array.isArray(out) ? out : out.questions || out.soal || out.items || [];
   const qs = list.map(q => validate(q, cat, headlines)).filter(Boolean);
@@ -227,7 +304,8 @@ Format JSON:
     const pics = await Promise.race([fetchBackup(cat, 12).catch(() => []), new Promise(r => setTimeout(() => r([]), 5000))]);
     // materi: jika mode 'all', dibuat setelah soal hanya bila sisa waktu fungsi masih cukup
     const matDeadline = T0 + (type === 'materi' ? 55000 : 56000);
-    if (matDeadline - Date.now() > 12000) {
+    if (matDasar && matDeadline - Date.now() > 12000) mat = await materialDasar(cat, matDeadline).catch(e => { console.error('materi dasar', cat, e.message); return null; });
+    else if (matDeadline - Date.now() > 12000) {
       mat = type === 'materi'
         ? await materialFor(cat, headlines, today, matDeadline, pics)            // mode materi: error dilaporkan
         : await materialFor(cat, headlines, today, matDeadline, pics).catch(e => { console.error('materi', cat, e.message); return null; });
@@ -235,7 +313,7 @@ Format JSON:
     if (mat) { await db.addMaterials([mat]); await db.pruneMaterials(MAX_MATERIALS).catch(e => console.error('prune', e.message)); }
   }
   const reason = type === 'materi' ? (mat ? '' : 'AI tidak mengirim materi yang valid')
-    : saved ? '' : list.length ? 'format soal dari AI tidak sesuai' : 'AI tidak mengirim soal';
+    : saved ? '' : knowReason || (list.length ? 'format soal dari AI tidak sesuai' : 'AI tidak mengirim soal');
   return { cat, saved, material: mat ? 1 : 0, headlines, reason };
 }
 
@@ -245,12 +323,14 @@ export default handle(['GET', 'POST'], async (req, res) => {
 
   const type = ['soal', 'materi'].includes(query(req).get('type')) ? query(req).get('type') : 'all';
   const all = Object.keys(NEWS_TOPICS);
-  const pickable = [...all, ...Object.keys(EVERGREEN)];
+  const pickable = [...new Set([...all, ...KNOW_CATS])];
+  // basis: 'terkini' | 'dasar' | 'campuran' (default; jadwal otomatis juga campuran)
+  const basis = ['terkini', 'dasar', 'campuran'].includes(query(req).get('basis')) ? query(req).get('basis') : 'campuran';
   const requested = query(req).get('cats');
   let cats;
   if (requested) {
-    cats = [...new Set(requested.split(','))].filter(c => (type === 'materi' ? all : pickable).includes(c)).slice(0, 4);
-    if (!cats.length) throw httpError(400, type === 'materi' ? 'Topik yang dipilih tidak punya materi berita. Pilih topik berita (Isu, TWK, OJK, BI, BUMN, Telkom, Perbankan).' : 'Pilih minimal 1 topik');
+    cats = [...new Set(requested.split(','))].filter(c => pickable.includes(c)).slice(0, 4);
+    if (!cats.length) throw httpError(400, 'Pilih minimal 1 topik');
   } else {
     // Rotasi harian: 3 kategori + isu terkini, agar muat dalam batas waktu fungsi
     const dayIdx = Math.floor(Date.now() / 86400000);
@@ -266,7 +346,7 @@ export default handle(['GET', 'POST'], async (req, res) => {
   let results;
   const T0 = Date.now();
   // tiap topik dijeda 1,2 dtk agar tidak menabrak batas per menit Gemini
-  try { results = await Promise.allSettled(cats.map((c, i) => new Promise(r => setTimeout(r, i * 1200)).then(() => generateFor(c, T0, type)))); }
+  try { results = await Promise.allSettled(cats.map((c, i) => new Promise(r => setTimeout(r, i * 1200)).then(() => generateFor(c, T0, type, basis, i)))); }
   finally { await dbg.setMeta('genStatus', { running: false, at: Date.now(), by, type, byUid }).catch(() => {}); }
   const summary = results.map((r, i) => r.status === 'fulfilled'
     ? { cat: r.value.cat, saved: r.value.saved, material: r.value.material || 0, reason: r.value.reason || '' }
@@ -274,7 +354,7 @@ export default handle(['GET', 'POST'], async (req, res) => {
 
   const headlines = results.flatMap(r => (r.status === 'fulfilled' ? r.value.headlines.slice(0, 3).map(h => ({ ...h, cat: r.value.cat })) : []));
   const db = await getDB();
-  const log = { at: Date.now(), by, byUid, type, summary, total: summary.reduce((s, x) => s + x.saved, 0), materials: summary.reduce((s, x) => s + (x.material || 0), 0) };
+  const log = { at: Date.now(), by, byUid, type, basis, summary, total: summary.reduce((s, x) => s + x.saved, 0), materials: summary.reduce((s, x) => s + (x.material || 0), 0) };
   await db.setMeta('lastGenerate', JSON.parse(JSON.stringify(log))).catch(e => console.error('log generate', e.message));
   if (headlines.length) await db.setMeta('news', JSON.parse(JSON.stringify({ at: Date.now(), items: headlines }))).catch(() => {});
   const quota = results.some(r => r.status === 'rejected' && r.reason?.quota);

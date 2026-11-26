@@ -40,15 +40,15 @@ export function setDockVisible(v) { document.body.classList.toggle('no-dock', !v
 export function openSoundPanel() {
   sheet(`
     <h3 class="h2">🎧 Suara</h3>
-    <p class="dim" style="margin:4px 0 12px">Musik lo-fi santai untuk menemani belajar. Dibuat langsung di browser, tanpa iklan.</p>
-    <label class="glass card row snd-row"><span style="font-size:24px">🎵</span><div style="flex:1"><b>Musik belajar</b><div class="dim">Lo-fi 72 BPM · Am7 – Fmaj7 – Cmaj7 – G7</div></div>
+    <p class="dim" style="margin:4px 0 12px">Musik otomatis berganti mengikuti halaman: tenang di Profil & Materi, menegangkan saat mengerjakan soal & duel, gembira di Peringkat, dan santai di Beranda. Dibuat langsung di browser, tanpa iklan.</p>
+    <label class="glass card row snd-row"><span style="font-size:24px">🎵</span><div style="flex:1"><b>Musik belajar</b><div class="dim">Suasana sekarang: <span id="sMood">${({calm:'😌 Tenang',normal:'🎧 Santai',tense:'⏱️ Menegangkan',happy:'🎉 Gembira'})[sound.mood]}</span></div></div>
       <input type="checkbox" class="switch" id="sMusic" ${sound.music ? 'checked' : ''}></label>
-    <label class="glass card row snd-row"><span style="font-size:24px">🔔</span><div style="flex:1"><b>Efek suara</b><div class="dim">Benar, salah, menang, kalah, duel</div></div>
+    <label class="glass card row snd-row"><span style="font-size:24px">🔔</span><div style="flex:1"><b>Efek suara</b><div class="dim">Klik menu, benar/salah, menang, kalah, duel, notifikasi</div></div>
       <input type="checkbox" class="switch" id="sSfx" ${sound.sfx ? 'checked' : ''}></label>
     <div class="glass card snd-row"><div class="row between"><b>🔊 Volume</b><span class="dim" id="sVolT">${Math.round(sound.vol * 100)}%</span></div>
       <input type="range" id="sVol" min="0" max="1" step="0.05" value="${sound.vol}" style="width:100%;accent-color:var(--cyan)"></div>
     <div class="row wrap" style="gap:8px;margin-top:10px"><button class="btn ghost sm" data-t="correct">✅ Benar</button><button class="btn ghost sm" data-t="wrong">❌ Salah</button>
-      <button class="btn ghost sm" data-t="win">🏆 Menang</button><button class="btn ghost sm" data-t="lose">😢 Kalah</button><button class="btn ghost sm" data-t="duel">⚔️ Duel</button></div>`,
+      <button class="btn ghost sm" data-t="win">🏆 Menang</button><button class="btn ghost sm" data-t="lose">😢 Kalah</button><button class="btn ghost sm" data-t="duel">⚔️ Duel</button><button class="btn ghost sm" data-t="notify">🔔 Notifikasi</button><button class="btn ghost sm" data-t="levelup">⭐ Naik level</button></div>`,
   el => {
     $('#sMusic', el).onchange = e => sound.toggleMusic(e.target.checked);
     $('#sSfx', el).onchange = e => sound.toggleSfx(e.target.checked);

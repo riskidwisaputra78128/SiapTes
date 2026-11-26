@@ -1,4 +1,4 @@
-// Mode 4: Interaktif Visual — susun urutan, susun kalimat, pencocokan, kelompokkan, susun grafik
+// Mode 4: Interaktif Visual — 8 cara: susun urutan, susun kalimat, pencocokan, kelompokkan, susun grafik, isi rumpang, benar/salah, cari yang berbeda
 import { $, $$, esc, toast, confetti, vibrate, icons, fmt } from './ui.js';
 import { sfx } from './sound.js';
 import { diffByKey } from './data.js';
@@ -9,6 +9,9 @@ const KIND = {
   match: { ico: '🔗', name: 'Pencocokan', hint: 'Ketuk satu item di kiri, lalu pasangannya di kanan.' },
   sort: { ico: '🗂️', name: 'Kelompokkan', hint: 'Ketuk sebuah item, lalu ketuk kelompok tujuannya.' },
   chart: { ico: '📊', name: 'Susun grafik', hint: 'Geser batang ke atas/bawah atau pakai tombol − / + sampai nilainya tepat.' },
+  fill: { ico: '✏️', name: 'Isi rumpang', hint: 'Ketuk kata di bawah untuk mengisi bagian kosong secara berurutan. Ketuk isian untuk menghapusnya.' },
+  tf: { ico: '⚖️', name: 'Benar / Salah', hint: 'Tentukan setiap pernyataan benar atau salah.' },
+  odd: { ico: '🕵️', name: 'Cari yang berbeda', hint: 'Ketuk satu item yang TIDAK sekelompok dengan yang lain.' },
 };
 const COLORS = ['#22d3ee', '#a78bfa', '#fbbf24', '#34d399', '#fb7185', '#f472b6', '#38bdf8'];
 
@@ -59,7 +62,7 @@ export function runInteractive(app, practice, { complete, metaHTML, srcHTML, con
       </div>`;
     const stage = $('#stage');
     const api = { setReady: ok => { const b = $('#checkBtn'); if (b) b.disabled = !ok; } };
-    const engine = ({ order: orderEngine, words: orderEngine, match: matchEngine, sort: sortEngine, chart: chartEngine }[q.kind] || orderEngine)(stage, q, api);
+    const engine = ({ order: orderEngine, words: orderEngine, match: matchEngine, sort: sortEngine, chart: chartEngine, fill: fillEngine, tf: tfEngine, odd: oddEngine }[q.kind] || orderEngine)(stage, q, api);
     $('#resetBtn').onclick = () => { engine.reset(); api.setReady(false); };
     $('#checkBtn').onclick = () => {
       const res = engine.check(); // { ratio: 0..1, correctView: html }
@@ -284,6 +287,91 @@ function chartEngine(stage, q, api) {
         ratio: marks.filter(Boolean).length / vals.length,
         correctView: `<b>Nilai benar:</b> <span class="muted">${c.labels.map((lb, k) => `${esc(lb)} = ${fmtNum(c.values[k], step)}`).join(' · ')} ${esc(c.unit || '')}</span>`,
       };
+    },
+  };
+}
+
+/* ───────── Isi rumpang ───────── */
+function fillEngine(stage, q, api) {
+  const parts = String(q.text || '').split('___');
+  const holes = parts.length - 1;
+  let pool, slots, locked;
+  const reset = () => { pool = shuffle([...q.blanks, ...(q.extras || [])].map((t, i) => ({ t, i }))); slots = Array(holes).fill(null); locked = false; render(); };
+  function render(marks) {
+    const next = slots.indexOf(null);
+    stage.innerHTML = `
+      <div class="ix-fill">${parts.map((p, k) => esc(p) + (k < holes ? `<button class="ix-blank ${slots[k] ? 'filled' : ''} ${k === next && !locked ? 'next' : ''} ${marks ? (marks[k] ? 'right' : 'wrong') : ''}" data-s="${k}">${slots[k] ? esc(slots[k].t) : `<span class="dim">(${k + 1})</span>`}</button>` : '')).join('')}</div>
+      <div class="ix-pool">${pool.map((p, k) => `<button class="ix-chip" data-p="${k}"><span>${esc(p.t)}</span></button>`).join('')}</div>`;
+    if (locked) return;
+    $$('[data-p]', stage).forEach(b => (b.onclick = () => {
+      const k = slots.indexOf(null); if (k < 0) return;
+      slots[k] = pool.splice(+b.dataset.p, 1)[0]; vibrate(8); render(); api.setReady(!slots.includes(null));
+    }));
+    $$('[data-s]', stage).forEach(b => (b.onclick = () => {
+      const k = +b.dataset.s; if (!slots[k]) return;
+      pool.push(slots[k]); slots[k] = null; render(); api.setReady(false);
+    }));
+  }
+  reset();
+  return {
+    reset,
+    check() {
+      locked = true;
+      const marks = slots.map((s, k) => s && s.t.trim().toLowerCase() === String(q.blanks[k]).trim().toLowerCase());
+      render(marks);
+      return {
+        ratio: marks.filter(Boolean).length / holes,
+        correctView: `<b>Kalimat lengkap:</b><div class="muted" style="margin-top:4px">${parts.map((p, k) => esc(p) + (k < holes ? `<b style="color:var(--green,#34d399)">${esc(q.blanks[k])}</b>` : '')).join('')}</div>`,
+      };
+    },
+  };
+}
+
+/* ───────── Benar / Salah ───────── */
+function tfEngine(stage, q, api) {
+  const list = q.statements || [];
+  let ans, locked;
+  const reset = () => { ans = list.map(() => null); locked = false; render(); };
+  function render(check) {
+    stage.innerHTML = `<div class="ix-tf">${list.map((s, k) => `
+      <div class="ix-tf-row ${check ? (ans[k] === s.v ? 'right' : 'wrong') : ''}">
+        <span class="ix-tf-n">${k + 1}</span><p>${esc(s.t)}</p>
+        <div class="ix-tf-btns"><button class="${ans[k] === true ? 'on t' : ''}" data-t="${k}:1" aria-label="Benar">✓ Benar</button><button class="${ans[k] === false ? 'on f' : ''}" data-t="${k}:0" aria-label="Salah">✗ Salah</button></div>
+        ${check && ans[k] !== s.v ? `<small class="ix-tf-key">Jawaban: ${s.v ? 'Benar' : 'Salah'}</small>` : ''}
+      </div>`).join('')}</div>`;
+    if (locked) return;
+    $$('[data-t]', stage).forEach(b => (b.onclick = () => {
+      const [k, v] = b.dataset.t.split(':'); ans[+k] = v === '1'; vibrate(8); render(); api.setReady(!ans.includes(null));
+    }));
+  }
+  reset();
+  return {
+    reset,
+    check() {
+      locked = true; render(true);
+      const ok = list.filter((s, k) => ans[k] === s.v).length;
+      return { ratio: ok / list.length, correctView: '' };
+    },
+  };
+}
+
+/* ───────── Cari yang berbeda ───────── */
+function oddEngine(stage, q, api) {
+  let items, sel, locked;
+  const reset = () => { items = shuffle(q.items.map((t, i) => ({ t, i }))); sel = null; locked = false; render(); };
+  function render(check) {
+    stage.innerHTML = `<div class="ix-odd">${items.map((it, k) => `
+      <button class="ix-odd-card ${sel === k ? 'sel' : ''} ${check ? (it.i === q.odd ? 'right' : sel === k ? 'wrong' : 'dimmed') : ''}" data-o="${k}" style="--c:${COLORS[k % COLORS.length]}">
+        <span class="ix-odd-mark">${check && it.i === q.odd ? '🎯' : sel === k ? '👆' : '❔'}</span><span>${esc(it.t)}</span></button>`).join('')}</div>`;
+    if (locked) return;
+    $$('[data-o]', stage).forEach(b => (b.onclick = () => { sel = +b.dataset.o; vibrate(8); render(); api.setReady(true); }));
+  }
+  reset();
+  return {
+    reset,
+    check() {
+      locked = true; render(true);
+      return { ratio: items[sel]?.i === q.odd ? 1 : 0, correctView: `<b>Yang berbeda:</b> ${esc(q.items[q.odd])}` };
     },
   };
 }

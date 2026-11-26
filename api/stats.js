@@ -5,7 +5,7 @@ import { getDB } from './_lib/db.js';
 
 const CAT_NAMES = {
   twk: 'TWK', tiu: 'TIU', tkp: 'TKP', ojk: 'OJK', bi: 'Bank Indonesia', bumn: 'BUMN', telkom: 'Telkom & Digital',
-  keuangan: 'Perbankan & Keuangan', english: 'Bahasa Inggris', isu: 'Isu Terkini', campuran: 'Campuran',
+  keuangan: 'Perbankan & Keuangan', english: 'Bahasa Inggris', isu: 'Isu Terkini', psikologi: 'Tes Psikologi', campuran: 'Campuran',
 };
 const DIFF_NAMES = { easy: 'Easy', normal: 'Normal', hard: 'Hard', prof: 'Prof', all: 'Semua' };
 const MODE_NAMES = { pg: 'Pilihan Ganda', game: 'Arena Game', essay: 'Esai', interaktif: 'Interaktif Visual', duel: 'Duel' };

@@ -14,9 +14,9 @@ export const session = {
 
 // Info publik (berita + jumlah bank soal), di-cache 60 detik agar tidak dipanggil berulang
 let infoCache = null;
-export function getInfo() {
-  if (!infoCache || Date.now() - infoCache.at > 60000) {
-    infoCache = { at: Date.now(), p: api('/news').catch(e => { infoCache = null; throw e; }) };
+export function getInfo(force = false) {
+  if (force || !infoCache || Date.now() - infoCache.at > 60000) {
+    infoCache = { at: Date.now(), p: api(force ? '/news?t=' + Date.now() : '/news').catch(e => { infoCache = null; throw e; }) };
   }
   return infoCache.p;
 }

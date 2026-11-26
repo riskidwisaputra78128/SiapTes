@@ -1,9 +1,58 @@
 // Soal mode Interaktif Visual
 // kind: 'order' (susun urutan) | 'words' (susun kalimat) | 'match' (pencocokan) | 'sort' (kelompokkan) | 'chart' (susun grafik)
+//       'fill' (isi rumpang) | 'tf' (benar/salah) | 'odd' (cari yang berbeda)
 const I = (id, category, difficulty, kind, question, data, explanation) =>
   ({ id: 'i-' + id, type: 'interactive', kind, category, difficulty, question, ...data, explanation });
 
 export const SEED_INTERACTIVE = [
+  // ───────── Tes Psikologi (interaktif) ─────────
+  I('psi-o1', 'psikologi', 'normal', 'order', 'Urutkan langkah mengerjakan satu kolom tes Kraepelin.',
+    { items: ['Dengarkan aba-aba mulai', 'Jumlahkan dua angka paling bawah', 'Tulis angka satuan hasilnya di antara kedua angka', 'Lanjut ke pasangan angka berikutnya ke atas', 'Pindah ke kolom baru saat aba-aba berbunyi'] },
+    'Kraepelin dikerjakan dari bawah ke atas; saat aba-aba pindah, kolom lama ditinggalkan.'),
+  I('psi-m1', 'psikologi', 'normal', 'match', 'Cocokkan nama tes dengan jenisnya.',
+    { pairs: [{ a: 'Kraepelin', b: 'Ketahanan & sikap kerja' }, { a: 'Wartegg', b: 'Proyektif menggambar' }, { a: 'EPPS', b: 'Inventori kepribadian forced choice' }, { a: 'CFIT', b: 'Inteligensi bebas budaya' }] },
+    'Psikotes terbagi menjadi tes kemampuan, ketahanan kerja, dan kepribadian.'),
+  I('psi-m2', 'psikologi', 'easy', 'match', 'Cocokkan huruf DISC dengan artinya.',
+    { pairs: [{ a: 'D', b: 'Dominance' }, { a: 'I', b: 'Influence' }, { a: 'S', b: 'Steadiness' }, { a: 'C', b: 'Compliance' }] },
+    'DISC adalah model gaya perilaku yang populer dalam rekrutmen.'),
+
+
+  // ───────── Isi rumpang ─────────
+  I('f1', 'twk', 'easy', 'fill', 'Lengkapi kalimat berikut.',
+    { text: 'Rumusan Pancasila tercantum dalam Pembukaan UUD 1945 alinea ___, sedangkan semboyan Bhinneka Tunggal Ika berasal dari kitab ___.', blanks: ['keempat', 'Sutasoma'], extras: ['ketiga', 'Negarakertagama', 'Pararaton'] },
+    'Semboyan Bhinneka Tunggal Ika diambil dari Kakawin Sutasoma karya Mpu Tantular.'),
+  I('f2', 'bi', 'normal', 'fill', 'Lengkapi kalimat tentang kebijakan moneter.',
+    { text: 'Untuk meredam inflasi, Bank Indonesia cenderung ___ suku bunga kebijakan sehingga bunga kredit ___ dan permintaan melambat.', blanks: ['menaikkan', 'naik'], extras: ['menurunkan', 'turun'] },
+    'Kenaikan BI-Rate membuat biaya pinjaman naik sehingga konsumsi dan investasi melambat, lalu inflasi mereda.'),
+  I('f3', 'ojk', 'normal', 'fill', 'Lengkapi kalimat berikut.',
+    { text: 'Lembaga yang menjamin simpanan nasabah bank adalah ___, sedangkan pengawasan sektor jasa keuangan dilakukan oleh ___.', blanks: ['LPS', 'OJK'], extras: ['BI', 'BPK', 'KSSK'] },
+    'LPS menjamin simpanan; OJK mengatur dan mengawasi sektor jasa keuangan sejak 2013 untuk perbankan.'),
+  I('f4', 'english', 'normal', 'fill', 'Complete the sentence with the correct words.',
+    { text: 'If I ___ more time, I ___ join the training program.', blanks: ['had', 'would'], extras: ['have', 'will', 'has'] },
+    'Second conditional: If + past simple, would + base verb — for unreal/hypothetical present situations.'),
+  // ───────── Benar / Salah ─────────
+  I('t1', 'twk', 'normal', 'tf', 'Tentukan benar atau salah setiap pernyataan berikut.',
+    { statements: [{ t: 'UUD 1945 telah diamendemen sebanyak empat kali.', v: true }, { t: 'Mahkamah Agung berwenang menguji UU terhadap UUD 1945.', v: false }, { t: 'Presiden dipilih langsung oleh rakyat sejak Pemilu 2004.', v: true }, { t: 'Ketetapan MPR berada di bawah Undang-Undang dalam hierarki peraturan.', v: false }, { t: 'Komisi Yudisial mengawasi perilaku hakim.', v: true }] },
+    'Pengujian UU terhadap UUD adalah wewenang Mahkamah Konstitusi; Tap MPR berada di atas UU.'),
+  I('t2', 'keuangan', 'easy', 'tf', 'Tentukan benar atau salah.',
+    { statements: [{ t: 'QRIS adalah standar kode QR pembayaran nasional yang ditetapkan Bank Indonesia.', v: true }, { t: 'Deposito dapat ditarik kapan saja tanpa penalti sebelum jatuh tempo.', v: false }, { t: 'Diversifikasi investasi bertujuan menyebar risiko.', v: true }, { t: 'Pinjol ilegal terdaftar dan diawasi OJK.', v: false }] },
+    'Deposito memiliki jangka waktu; pencairan sebelum jatuh tempo umumnya kena penalti. Pinjol legal adalah yang berizin OJK.'),
+  I('t3', 'psikologi', 'normal', 'tf', 'Tentukan benar atau salah tentang psikotes.',
+    { statements: [{ t: 'Pada Kraepelin, peserta menulis angka satuan hasil penjumlahan dua angka berdekatan.', v: true }, { t: 'Tes kepribadian memiliki satu jawaban benar untuk setiap butir.', v: false }, { t: 'Wartegg terdiri dari 8 kotak stimulus.', v: true }, { t: 'Pada tes BAUM, peserta dianjurkan menggambar pohon kelapa.', v: false }, { t: 'MBTI menghasilkan 16 tipe kepribadian.', v: true }] },
+    'Tes kepribadian tidak memiliki jawaban benar/salah; BAUM meminta pohon berkayu.'),
+  // ───────── Cari yang berbeda ─────────
+  I('x1', 'ojk', 'easy', 'odd', 'Manakah yang BUKAN lembaga anggota KSSK?',
+    { items: ['Kementerian Keuangan', 'Bank Indonesia', 'OJK', 'LPS', 'BPK'], odd: 4 },
+    'KSSK beranggotakan Menteri Keuangan, Gubernur BI, Ketua DK OJK, dan Ketua DK LPS. BPK adalah pemeriksa keuangan negara.'),
+  I('x2', 'bumn', 'normal', 'odd', 'Manakah yang BUKAN bagian dari core values AKHLAK BUMN?',
+    { items: ['Amanah', 'Kompeten', 'Harmonis', 'Loyal', 'Kreatif'], odd: 4 },
+    'AKHLAK = Amanah, Kompeten, Harmonis, Loyal, Adaptif, Kolaboratif. "Kreatif" bukan salah satunya.'),
+  I('x3', 'telkom', 'normal', 'odd', 'Manakah yang tidak sekelompok?',
+    { items: ['Fiber optik', 'Kabel tembaga', 'Satelit', 'Microwave link', 'Spreadsheet'], odd: 4 },
+    'Empat lainnya adalah media transmisi telekomunikasi; spreadsheet adalah aplikasi pengolah data.'),
+  I('x4', 'psikologi', 'easy', 'odd', 'Manakah yang BUKAN tes proyektif?',
+    { items: ['Wartegg', 'DAP (menggambar orang)', 'BAUM (menggambar pohon)', 'Kraepelin', 'HTP (rumah-pohon-orang)'], odd: 3 },
+    'Kraepelin adalah tes ketahanan dan sikap kerja, bukan tes proyektif.'),
   // ───────── Susun urutan ─────────
   I('o1', 'twk', 'easy', 'order', 'Urutkan sila-sila Pancasila dari sila pertama sampai kelima.',
     { items: ['Ketuhanan Yang Maha Esa', 'Kemanusiaan yang adil dan beradab', 'Persatuan Indonesia', 'Kerakyatan yang dipimpin oleh hikmat kebijaksanaan dalam permusyawaratan/perwakilan', 'Keadilan sosial bagi seluruh rakyat Indonesia'] },

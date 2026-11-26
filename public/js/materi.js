@@ -43,6 +43,53 @@ function quizOf(m) {
 }
 
 const isAdminUser = () => !!session.user?.admin;
+
+/* ───── AI pendamping materi ───── */
+const md = t => esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/^\s*[-•]\s+(.*)$/gm, '<li>$1</li>').replace(/(<li>.*<\/li>\n?)+/g, x => `<ul>${x}</ul>`).replace(/\n/g, '<br>').replace(/<\/li><br>/g, '</li>').replace(/<\/ul><br>/g, '</ul>');
+const STARTERS = ['Jelaskan materi ini dengan sederhana', 'Apa jebakan soal yang sering muncul?', 'Beri aku 1 contoh soal latihan', 'Ringkas jadi 3 poin penting'];
+function openTutor(m) {
+  if ($('#tutor')) { $('#tutor').classList.add('open'); $('#tutorIn')?.focus(); return; }
+  const key = 'sl_tutor_' + m.id;
+  let hist = []; try { hist = JSON.parse(sessionStorage.getItem(key) || '[]'); } catch {}
+  const el = document.createElement('aside');
+  el.id = 'tutor'; el.className = 'tutor glass';
+  el.innerHTML = `
+    <header class="tutor-head"><span class="tutor-av">🤖</span><div style="flex:1;min-width:0"><b>Mentor AI</b><div class="dim tutor-sub">${esc(m.title)}</div></div>
+      <button class="tutor-x" aria-label="Tutup">✕</button></header>
+    <div class="tutor-log" id="tutorLog"></div>
+    <div class="tutor-sug" id="tutorSug"></div>
+    <form class="tutor-form" id="tutorForm"><input id="tutorIn" maxlength="600" placeholder="${session.loggedIn ? 'Tanya apa saja tentang materi ini…' : 'Masuk akun untuk bertanya ke AI'}" ${session.loggedIn ? '' : 'disabled'} autocomplete="off">
+      <button class="btn sm" id="tutorSend" ${session.loggedIn ? '' : 'disabled'} aria-label="Kirim">➤</button></form>`;
+  document.body.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('open'));
+  const log = $('#tutorLog', el), sug = $('#tutorSug', el), input = $('#tutorIn', el);
+  const bubble = (role, html) => { const d = document.createElement('div'); d.className = 'tmsg ' + role; d.innerHTML = html; log.appendChild(d); log.scrollTop = log.scrollHeight; return d; };
+  const chips = list => { sug.innerHTML = list.map(t => `<button class="pill sm" data-q="${esc(t)}">${esc(t)}</button>`).join(''); $$('[data-q]', sug).forEach(b => (b.onclick = () => ask(b.dataset.q))); };
+  bubble('ai', `Hai${session.user?.name ? ' ' + esc(session.user.name.split(' ')[0]) : ''}! 👋 Aku mentor AI untuk materi <b>${esc(m.title)}</b>. Tanyakan apa saja yang belum jelas, minta contoh soal, atau minta penjelasan yang lebih sederhana.`);
+  hist.forEach(h => bubble(h.role, h.role === 'ai' ? md(h.text) : esc(h.text)));
+  chips(session.loggedIn ? STARTERS : []);
+  if (!session.loggedIn) bubble('ai', '🔒 Fitur ini khusus pengguna yang sudah masuk akun. <a href="#/login">Masuk sekarang</a>');
+  let busy = false;
+  async function ask(text) {
+    text = String(text || '').trim(); if (!text || busy) return;
+    busy = true; input.value = ''; sug.innerHTML = '';
+    bubble('me', esc(text)); const wait = bubble('ai typing', '<span></span><span></span><span></span>');
+    try {
+      const r = await api('/grade', { method: 'POST', body: { action: 'tutor', materialId: m.id, message: text, history: hist } });
+      wait.remove(); bubble('ai', md(r.answer));
+      hist.push({ role: 'me', text }, { role: 'ai', text: r.answer }); hist = hist.slice(-12);
+      try { sessionStorage.setItem(key, JSON.stringify(hist)); } catch {}
+      chips(r.followups?.length ? r.followups : STARTERS.slice(0, 2));
+      sfx('send');
+    } catch (e) { wait.remove(); bubble('ai err', '⚠️ ' + esc(e.message)); chips(STARTERS.slice(0, 2)); }
+    busy = false; input.focus();
+  }
+  $('#tutorForm', el).onsubmit = e => { e.preventDefault(); ask(input.value); };
+  $('.tutor-x', el).onclick = () => el.classList.remove('open');
+  const cleanup = () => { if (!location.hash.includes('id=' + encodeURIComponent(m.id))) { el.remove(); removeEventListener('hashchange', cleanup); } };
+  addEventListener('hashchange', cleanup);
+  setTimeout(() => input.focus(), 250);
+}
 // konfirmasi lalu hapus (khusus admin)
 function askDelete(m, onDone) {
   sheet(`<h3 class="h2">🗑️ Hapus materi?</h3>
@@ -67,6 +114,7 @@ function card(m, read) {
       <span class="mat-cover">${coverImg(m)}${m.extras ? '<span class="mat-badge">✨ Interaktif</span>' : ''}${isAdminUser() && !m.core ? `<button class="mat-del" data-del="${esc(m.id)}" title="Hapus materi" aria-label="Hapus materi">🗑️</button>` : ''}</span>
       <div class="row wrap" style="gap:6px">
         <span class="chip">${c.ico || '📘'} ${esc(c.name || m.category)}</span>
+        ${m.basis === 'dasar' ? '<span class="chip basis-d">📚 Dasar</span>' : m.basis === 'terkini' ? '<span class="chip basis-t">🗞️ Terkini</span>' : ''}
         ${isNew ? '<span class="chip new">BARU</span>' : ''}
         ${read.has(m.id) ? '<span class="chip" style="color:var(--green)">✓ Dibaca</span>' : ''}
       </div>
@@ -80,12 +128,12 @@ export async function renderMateri(app, params) {
   const id = params.get('id');
   if (id) return renderDetail(app, id);
   let tab = ['hari', 'arsip', 'inti'].includes(params.get('tab')) ? params.get('tab') : 'hari';
-  let filter = 'all';
+  let filter = 'all', bfilter = 'all';
   app.innerHTML = `
   <section class="stack fade-in">
     <div class="row between wrap">
-      <div><h1 class="h1">📖 Materi belajar</h1><p class="muted" style="margin:0">Rangkuman berita terbaru setiap pagi, tersimpan di arsip + materi inti setiap tes.</p></div>
-      <div class="row" style="gap:8px"><div class="tabs" id="matTabs"><button data-t="hari">🗞️ Hari Ini</button><button data-t="arsip">📚 Semua Berita</button><button data-t="inti">📘 Inti</button></div>
+      <div><h1 class="h1">📖 Materi belajar</h1><p class="muted" style="margin:0">Modul pengetahuan dasar & rangkuman update terkini, tersimpan di arsip + materi inti setiap tes.</p></div>
+      <div class="row" style="gap:8px"><div class="tabs" id="matTabs"><button data-t="hari">🗞️ Hari Ini</button><button data-t="arsip">🗂️ Semua Materi</button><button data-t="inti">📘 Inti</button></div>
       <button class="icon-btn" id="matRefresh" title="Muat ulang" aria-label="Muat ulang">🔄</button></div>
     </div>
     <div id="matBody"><div class="skeleton" style="height:240px"></div></div>
@@ -114,21 +162,25 @@ export async function renderMateri(app, params) {
     }
     // Arsip semua berita
     const cats = [...new Set(data.daily.map(m => m.category))];
-    const list = data.daily.filter(m => filter === 'all' || m.category === filter);
+    const list = data.daily.filter(m => (filter === 'all' || m.category === filter) && (bfilter === 'all' || m.basis === bfilter));
     const groups = new Map();
     for (const m of list) { const k = m.day || 'lain'; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(m); }
     const max = data.max || 50;
     body.innerHTML = !data.daily.length
       ? `<div class="glass card empty"><div style="font-size:44px">📚</div>Arsip masih kosong. Materi harian akan menumpuk di sini setiap hari.</div>`
       : `<div class="glass card arsip-head">
-          <div class="row between wrap" style="gap:10px"><div><b>📚 Arsip berita</b><div class="dim">${data.daily.length} dari maksimal ${max} materi tersimpan · materi terlama terhapus otomatis</div></div>
+          <div class="row between wrap" style="gap:10px"><div><b>🗂️ Arsip materi</b><div class="dim">${data.daily.length} dari maksimal ${max} materi tersimpan · materi terlama terhapus otomatis</div></div>
             <div class="arsip-meter"><i style="width:${Math.min(100, (data.daily.length / max) * 100)}%"></i></div></div>
-          <div class="pill-group" style="margin-top:12px" id="catFilter">
+          <div class="pill-group" style="margin-top:12px" id="basisFilter">
+            ${[['all', 'Semua jenis'], ['dasar', '📚 Pengetahuan dasar'], ['terkini', '🗞️ Update terkini']].map(([k, l]) => `<button class="pill ${bfilter === k ? 'on' : ''}" data-b="${k}">${l}</button>`).join('')}
+          </div>
+          <div class="pill-group" style="margin-top:8px" id="catFilter">
             <button class="pill ${filter === 'all' ? 'on' : ''}" data-f="all">Semua</button>
             ${cats.map(c => `<button class="pill ${filter === c ? 'on' : ''}" data-f="${c}">${catByKey[c]?.ico || ''} ${esc(catByKey[c]?.name || c)}</button>`).join('')}
           </div></div>
         ${[...groups.entries()].map(([day, l]) => `<h2 class="h2 mat-day">${esc(dayLabel(day))} <span class="dim" style="font-weight:600">· ${l.length} materi</span></h2>${grid(l)}`).join('') || '<div class="empty">Tidak ada materi untuk topik ini.</div>'}`;
     $$('#catFilter [data-f]', body).forEach(b => (b.onclick = () => { filter = b.dataset.f; draw(); }));
+    $$('#basisFilter [data-b]', body).forEach(b => (b.onclick = () => { bfilter = b.dataset.b; draw(); }));
   };
   $$('#matTabs button', app).forEach(b => (b.onclick = () => { tab = b.dataset.t; draw(); history.replaceState(null, '', `#/materi?tab=${tab}`); }));
   $('#matBody').addEventListener('click', e => {
@@ -169,11 +221,12 @@ async function renderDetail(app, id) {
       <div class="mat-hero-body">
         <div class="row wrap" style="gap:6px">
           <span class="chip">${c.ico || '📘'} ${esc(c.name || m.category)}</span>
-          <span class="chip">${m.core ? '📚 Materi Inti' : `🗞️ ${esc(dayLabel(m.day))}`}</span>
+          <span class="chip">${m.core ? '📘 Materi Inti' : m.basis === 'dasar' ? `📚 Pengetahuan dasar · ${esc(dayLabel(m.day))}` : `🗞️ Update terkini · ${esc(dayLabel(m.day))}`}</span>
           <span class="chip">⏱️ ${m.readMin} menit</span>
         </div>
         <h1 class="h1" style="margin-top:12px">${esc(m.title)}</h1>
         <p class="muted" style="margin:0;font-size:16px">${esc(m.summary)}</p>
+        <button class="btn sm tutor-cta" id="tutorBtn" style="margin-top:14px">🤖 Tanya Mentor AI tentang materi ini</button>
       </div>
     </header>
 
@@ -209,6 +262,9 @@ async function renderDetail(app, id) {
     ${m.tips?.length ? `<div class="glass card"><h2 class="h2">💡 Tips menjawab soal</h2>
       <div class="stack" style="gap:8px;margin-top:10px">${m.tips.map(t => `<div class="tip good"><span>✔️</span><span>${esc(t)}</span></div>`).join('')}</div></div>` : ''}
 
+    ${m.refs?.length ? `<div class="glass card"><h2 class="h2">📚 Rujukan untuk dipelajari</h2>
+      <ul class="refs">${m.refs.map(r => `<li>${esc(r)}</li>`).join('')}</ul>
+      <p class="dim" style="margin:8px 0 0">Modul disusun AI dari pengetahuan dasar yang mapan. Cek kembali detailnya di rujukan resmi.</p></div>` : ''}
     ${m.sources?.length ? `<div class="glass card"><h2 class="h2">📰 Sumber berita</h2>
       ${m.sources.map(s => `<a class="news-item" href="${esc(s.link)}" target="_blank" rel="noopener">${srcThumb(s)}<div style="min-width:0"><span class="nt">${esc(s.title)}</span>
         <div class="dim">${esc(s.publisher || '')}${s.date ? ' · ' + timeAgo(s.date) : ''}</div></div></a>`).join('')}
@@ -257,6 +313,11 @@ async function renderDetail(app, id) {
     el.style.width = (h > 0 ? Math.min(100, (scrollY / h) * 100) : 100) + '%';
   };
   addEventListener('scroll', prog, { passive: true }); prog();
+  $('#tutorBtn').onclick = () => openTutor(m);
+  document.body.insertAdjacentHTML('beforeend', '<button class="tutor-fab" id="tutorFab" aria-label="Tanya Mentor AI">🤖<span>Tanya AI</span></button>');
+  $('#tutorFab').onclick = () => openTutor(m);
+  const fabClean = () => { $('#tutorFab')?.remove(); removeEventListener('hashchange', fabClean); };
+  addEventListener('hashchange', fabClean);
   $('#delMat')?.addEventListener('click', () => askDelete(m, () => { location.hash = '#/materi?tab=arsip&r=1'; }));
   $('#readBtn').onclick = () => {
     markRead(m.id); confetti(50);

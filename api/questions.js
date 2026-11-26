@@ -6,7 +6,7 @@ import { pickQuestions, DIFFS, shuffle } from './_lib/pick.js';
 import { requireUser, isAdmin } from './_lib/auth.js';
 import { getDB } from './_lib/db.js';
 
-const CATS = ['isu', 'twk', 'tiu', 'tkp', 'ojk', 'bi', 'bumn', 'telkom', 'keuangan', 'english'];
+const CATS = ['isu', 'twk', 'tiu', 'tkp', 'ojk', 'bi', 'bumn', 'telkom', 'keuangan', 'english', 'psikologi'];
 
 async function purge(b) {
   const count = Math.max(100, Math.min(200, parseInt(b.count, 10) || 100));

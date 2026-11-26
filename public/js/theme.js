@@ -1,4 +1,4 @@
-import { $$, sheet, toast } from './ui.js';
+import { $, $$, sheet, toast } from './ui.js';
 
 export const THEMES = [
   { key: 'dark', name: 'Gelap', ico: '🌙', desc: 'Default, nyaman malam hari', meta: '#070b1a',
@@ -25,7 +25,14 @@ export const THEMES = [
 const KEY = 'sl_theme';
 
 export function currentTheme() {
-  try { return localStorage.getItem(KEY) || 'dark'; } catch { return 'dark'; }
+  try { return localStorage.getItem(KEY) || localStorage.getItem(KEY + '_default') || 'dark'; } catch { return 'dark'; }
+}
+export const userPickedTheme = () => { try { return !!localStorage.getItem(KEY); } catch { return false; } };
+// Tema default dari admin: dipakai bila pengguna belum memilih tema sendiri
+export function applyServerDefault(key) {
+  if (!key || !THEMES.some(t => t.key === key)) return;
+  try { localStorage.setItem(KEY + '_default', key); } catch {}
+  if (!userPickedTheme() && document.documentElement.getAttribute('data-theme') !== (key === 'dark' ? null : key)) applyTheme(key, { save: false });
 }
 
 export function applyTheme(key, { save = true } = {}) {
@@ -42,6 +49,7 @@ export function openThemePicker() {
   const cur = currentTheme();
   sheet(`
     <div class="row between"><h3 class="h2">🎨 Pilih tema</h3><span class="dim">tersimpan di perangkat ini</span></div>
+    ${userPickedTheme() ? '<button class="btn ghost sm" id="themeReset" style="margin:6px 0 4px">↩️ Ikuti tema default situs</button>' : '<p class="dim" style="margin:4px 0 0">Saat ini mengikuti tema default situs.</p>'}
     <div class="theme-grid">${THEMES.map(t => `
       <button class="theme-opt ${t.key === cur ? 'on' : ''}" data-theme-key="${t.key}">
         <div class="theme-prev" style="background:${t.prev.bg}">
@@ -52,6 +60,11 @@ export function openThemePicker() {
       </button>`).join('')}
     </div>`,
   (el, close) => {
+    $('#themeReset', el)?.addEventListener('click', () => {
+      try { localStorage.removeItem(KEY); } catch {}
+      const t = applyTheme(localStorage.getItem(KEY + '_default') || 'dark', { save: false });
+      toast(`Mengikuti tema default: ${t.name} ${t.ico}`, 'ok'); setTimeout(close, 300);
+    });
     $$('[data-theme-key]', el).forEach(b => (b.onclick = () => {
       const t = applyTheme(b.dataset.themeKey);
       $$('[data-theme-key]', el).forEach(x => x.classList.toggle('on', x === b));

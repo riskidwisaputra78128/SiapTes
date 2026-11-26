@@ -10,6 +10,7 @@ export const CATEGORIES = [
   { key: 'telkom', name: 'Telkom & Digital', ico: '📡', tags: 'Telkom · IT', color: '#f472b6' },
   { key: 'keuangan', name: 'Perbankan & Keuangan', ico: '🏦', tags: 'Bank · Literasi', color: '#2dd4bf' },
   { key: 'english', name: 'Bahasa Inggris', ico: '🔤', tags: 'BI · OJK · BUMN', color: '#c084fc' },
+  { key: 'psikologi', name: 'Tes Psikologi', ico: '🧩', tags: 'Psikotes · Kraepelin', color: '#f59e0b' },
 ];
 export const catByKey = Object.fromEntries(CATEGORIES.map(c => [c.key, c]));
 
@@ -17,7 +18,7 @@ export const MODES = [
   { key: 'pg', name: 'Pilihan Ganda', ico: '📝', cls: 'mi-pg', desc: 'Simulasi ujian A–D dengan timer, navigasi soal, dan pembahasan.' },
   { key: 'game', name: 'Arena Game', ico: '🎮', cls: 'mi-game', desc: '3 nyawa, waktu per soal, combo poin, dan power-up 50:50.' },
   { key: 'essay', name: 'Esai + Koreksi', ico: '✍️', cls: 'mi-essay', desc: 'Jawab dengan kata-katamu sendiri, dikoreksi maksudnya otomatis.' },
-  { key: 'interaktif', name: 'Interaktif Visual', ico: '🧩', cls: 'mi-visual', desc: 'Susun urutan & kalimat, cocokkan, kelompokkan, dan bangun grafik.' },
+  { key: 'interaktif', name: 'Interaktif Visual', ico: '🧩', cls: 'mi-visual', desc: '8 cara: susun urutan & kalimat, cocokkan, kelompokkan, grafik, isi rumpang, benar/salah, cari yang berbeda.' },
 ];
 export const modeByKey = Object.fromEntries([...MODES, { key: 'duel', name: 'Duel', ico: '⚔️', cls: 'mi-game', desc: 'Duel multiplayer' }].map(m => [m.key, m]));
 

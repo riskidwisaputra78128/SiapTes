@@ -1,10 +1,22 @@
 // Status online pengguna
 // POST /api/presence { page, duel?, hidden? }  → heartbeat (±45 dtk sekali) + daftar yang online
 // GET  /api/presence                           → daftar yang online (tamu hanya mendapat jumlah)
-import { handle, readBody, send, query } from './_lib/http.js';
+import { handle, readBody, send, query, httpError } from './_lib/http.js';
 import { avatarRoute } from './_lib/avatar-route.js';
 import { feedbackRoute } from './_lib/feedback-route.js';
-import { getUser, requireUser } from './_lib/auth.js';
+
+// Pengaturan situs (khusus admin): tema default untuk pengguna yang belum memilih tema sendiri
+const THEME_KEYS = ['dark', 'light', 'dongeng', 'modern', 'senja', 'fajar', 'malam', 'pagi', 'sakura', 'pro'];
+const settingsRoute = handle(['POST'], async (req, res) => {
+  if (!isAdmin(requireUser(req))) throw httpError(403, 'Khusus admin');
+  const b = await readBody(req);
+  if (!THEME_KEYS.includes(b.defaultTheme)) throw httpError(400, 'Tema tidak dikenal');
+  const db = await getDB();
+  const cur = (await db.getMeta('settings').catch(() => null)) || {};
+  await db.setMeta('settings', { ...cur, defaultTheme: b.defaultTheme, updatedAt: Date.now() });
+  send(res, 200, { ok: true, defaultTheme: b.defaultTheme });
+});
+import { getUser, requireUser, isAdmin } from './_lib/auth.js';
 import { getDB } from './_lib/db.js';
 import { avatarMap, avatarUrl } from './_lib/avatar.js';
 
@@ -51,5 +63,6 @@ const presenceRoute = handle(['GET', 'POST'], async (req, res) => {
 export default function (req, res) {
   const q = query(req);
   if (q.get('op') === 'feedback') return feedbackRoute(req, res);
+  if (q.get('op') === 'settings') return settingsRoute(req, res);
   return q.get('avatar') || q.get('op') === 'avatar' ? avatarRoute(req, res) : presenceRoute(req, res);
 }

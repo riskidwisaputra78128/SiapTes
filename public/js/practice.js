@@ -56,6 +56,8 @@ export function renderSetup(app, params) {
   <section class="fade-in">
     <h1 class="h1">Atur latihanmu</h1>
     <p class="muted" style="margin-top:0">Pilih mode, materi, dan level. Soal diacak setiap sesi.</p>
+    <a href="#/psikotes" class="glass psi-banner tilt"><span class="psi-ico">🧩</span><span style="flex:1"><small>LATIHAN KHUSUS</small><b>Tes Psikologi</b>
+      <span class="dim">Simulasi Kraepelin/Pauli, tes kecermatan, soal psikotes & materinya</span></span><span class="psi-go">Buka →</span></a>
 
     <div class="glass setup-step" style="margin-top:14px">
       <div class="row" style="margin-bottom:12px"><span class="step-no">1</span><b>Mode latihan</b></div>
@@ -512,6 +514,9 @@ function reviewItem(x, i) {
     const ans = q.kind === 'match' ? q.pairs.map(p => `${esc(p.a)} → ${esc(p.b)}`).join('<br>')
       : q.kind === 'sort' ? q.buckets.map(b => `<b>${esc(b.name)}:</b> ${b.items.map(esc).join(', ')}`).join('<br>')
       : q.kind === 'chart' ? q.chart.labels.map((l, k) => `${esc(l)} = ${q.chart.values[k]}`).join(' · ') + ' ' + esc(q.chart.unit || '')
+      : q.kind === 'fill' ? esc(String(q.text || '').split('___').map((p, k, a) => p + (k < a.length - 1 ? `[${q.blanks[k]}]` : '')).join(''))
+      : q.kind === 'tf' ? q.statements.map(s => `${s.v ? '✓' : '✗'} ${esc(s.t)}`).join('<br>')
+      : q.kind === 'odd' ? `Yang berbeda: <b>${esc(q.items[q.odd])}</b>`
       : q.kind === 'words' ? esc(q.items.join(' ')) : q.items.map((t, k) => `${k + 1}. ${esc(t)}`).join('<br>');
     return `<div class="review-item"><div class="row" style="align-items:flex-start"><span>${x.ok ? '✅' : x.ratio >= 0.5 ? '◐' : '❌'}</span><b>${i + 1}. ${esc(q.question)}</b><span class="chip" style="margin-left:auto">${Math.round(x.ratio * 100)}%</span></div>
       <div class="ans"><span style="color:var(--green)">${ans}</span>${q.explanation ? `<span class="muted">${esc(q.explanation)}</span>` : ''}</div></div>`;
