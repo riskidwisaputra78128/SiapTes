@@ -10,16 +10,11 @@ const THEME_KEYS = ['dark', 'light', 'dongeng', 'modern', 'senja', 'fajar', 'mal
 const settingsRoute = handle(['POST'], async (req, res) => {
   if (!isAdmin(requireUser(req))) throw httpError(403, 'Khusus admin');
   const b = await readBody(req);
-  const patch = {};
-  if (b.defaultTheme !== undefined) { if (!THEME_KEYS.includes(b.defaultTheme)) throw httpError(400, 'Tema tidak dikenal'); patch.defaultTheme = b.defaultTheme; }
-  if (b.tutorEnabled !== undefined) patch.tutorEnabled = !!b.tutorEnabled;
-  if (b.tutorDaily !== undefined) { const n = parseInt(b.tutorDaily, 10); if (!(n >= 1 && n <= 200)) throw httpError(400, 'Batas harian 1–200'); patch.tutorDaily = n; }
-  if (!Object.keys(patch).length) throw httpError(400, 'Tidak ada pengaturan yang diubah');
+  if (!THEME_KEYS.includes(b.defaultTheme)) throw httpError(400, 'Tema tidak dikenal');
   const db = await getDB();
   const cur = (await db.getMeta('settings').catch(() => null)) || {};
-  const next = { ...cur, ...patch, updatedAt: Date.now() };
-  await db.setMeta('settings', next);
-  send(res, 200, { ok: true, ...patch });
+  await db.setMeta('settings', { ...cur, defaultTheme: b.defaultTheme, updatedAt: Date.now() });
+  send(res, 200, { ok: true, defaultTheme: b.defaultTheme });
 });
 import { getUser, requireUser, isAdmin } from './_lib/auth.js';
 import { getDB } from './_lib/db.js';

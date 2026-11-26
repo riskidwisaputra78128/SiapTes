@@ -1317,5 +1317,3 @@ body:has(.start-bar) .dock { bottom: calc(96px + var(--safe-b)); }
   .dp > .dp-score { grid-area: score; min-width: 0; font-size: 17px; }
   .dp:not(:has(.dp-ans, .dp-pts, .dp-race)) > .dp-name { grid-row: 1 / span 2; align-self: center; }
 }
-.tutor-left { font-size: 11px; color: var(--cyan); font-weight: 700; }
-.tmsg-tag { display: block; margin-top: 6px; font-size: 11px; color: var(--muted); }

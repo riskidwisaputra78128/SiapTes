@@ -603,14 +603,6 @@ function renderProfile() {
       <div class="dim" id="defThemeInfo" style="margin-top:8px"></div>
     </div>
     <div class="glass card">
-      <div class="row between wrap" style="gap:10px"><h2 class="h2" style="margin:0">🤖 Mentor AI di materi</h2>
-        <label class="row" style="gap:8px;cursor:pointer"><input type="checkbox" class="switch" id="tutorOn"><b id="tutorOnTxt">…</b></label></div>
-      <p class="muted" style="margin:6px 0 10px">Mentor AI memakai kuota Gemini yang sama dengan generate. Matikan bila kuota sedang menipis. Jawaban untuk 4 pertanyaan saran disimpan dan dipakai ulang untuk semua pengguna, jadi tidak memakai kuota lagi dan tidak mengurangi jatah harian.</p>
-      <div class="dim psi-lbl">Batas pertanyaan per pengguna per hari</div>
-      <div class="pill-group" id="tutorDaily">${[5, 10, 20, 40, 60].map(n => `<button class="pill" data-td="${n}">${n}</button>`).join('')}</div>
-      <div class="dim" id="tutorInfo" style="margin-top:8px"></div>
-    </div>
-    <div class="glass card">
       <h2 class="h2">🧹 Hapus soal massal</h2>
       <p class="muted" style="margin:6px 0 10px">Hapus 100–200 soal hasil generate secara acak. Topik dengan soal <b>paling banyak</b> akan paling banyak dikurangi, agar jumlah soal antar topik lebih seimbang. Soal bawaan (inti) tidak ikut terhapus.</p>
       <div class="row" style="gap:12px;align-items:center"><input type="range" id="purgeN" min="100" max="200" step="10" value="100" style="flex:1;accent-color:var(--cyan)"><b id="purgeNT" style="font-family:var(--num);min-width:72px;text-align:right">100 soal</b></div>
@@ -679,20 +671,6 @@ function renderProfile() {
       try { await api('/presence?op=settings', { method: 'POST', body: { defaultTheme: k } }); paintDef(k); applyServerDefault(k); toast('Tema default disimpan untuk semua pengguna', 'ok'); }
       catch (e) { toast(e.message, 'err'); } finally { b.disabled = false; }
     }));
-    // ── Mentor AI ──
-    const paintTutor = (on, n) => {
-      $('#tutorOn').checked = on; $('#tutorOnTxt').textContent = on ? 'Aktif' : 'Nonaktif';
-      $$('#tutorDaily [data-td]').forEach(b => b.classList.toggle('on', +b.dataset.td === n));
-      $('#tutorInfo').textContent = on ? `Setiap pengguna bisa bertanya ${n}× per hari (di luar pertanyaan saran).` : 'Tombol Mentor AI disembunyikan dari semua halaman materi.';
-    };
-    let tCfg = { on: true, n: 20 };
-    getInfo(true).then(d => { tCfg = { on: d?.settings?.tutorEnabled !== false, n: d?.settings?.tutorDaily || 20 }; paintTutor(tCfg.on, tCfg.n); }).catch(() => {});
-    const saveTutor = async (patch, msg) => {
-      try { await api('/presence?op=settings', { method: 'POST', body: patch }); Object.assign(tCfg, patch.tutorEnabled !== undefined ? { on: patch.tutorEnabled } : {}, patch.tutorDaily ? { n: patch.tutorDaily } : {}); paintTutor(tCfg.on, tCfg.n); getInfo(true).catch(() => {}); toast(msg, 'ok'); }
-      catch (e) { toast(e.message, 'err'); paintTutor(tCfg.on, tCfg.n); }
-    };
-    $('#tutorOn').onchange = e => saveTutor({ tutorEnabled: e.target.checked }, e.target.checked ? 'Mentor AI diaktifkan' : 'Mentor AI dinonaktifkan');
-    $$('#tutorDaily [data-td]').forEach(b => (b.onclick = () => saveTutor({ tutorDaily: +b.dataset.td }, `Batas harian: ${b.dataset.td} pertanyaan`)));
     // ── Hapus soal massal ──
     const pN = () => +$('#purgeN').value;
     $('#purgeN').oninput = () => { $('#purgeNT').textContent = pN() + ' soal'; $('#purgeOut').innerHTML = ''; };
