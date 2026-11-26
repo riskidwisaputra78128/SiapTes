@@ -36,6 +36,6 @@ export async function api(path, { method = 'GET', body } = {}) {
     session.clear();
     window.dispatchEvent(new Event('auth:expired'));
   }
-  if (!r.ok) throw new Error(data.error || `Gagal memuat (${r.status})`);
+  if (!r.ok) throw Object.assign(new Error(data.error || `Gagal memuat (${r.status})`), { status: r.status });
   return data;
 }

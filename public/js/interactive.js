@@ -29,6 +29,12 @@ function shuffledNotSame(arr) {
 const round = (v, step) => Math.round(v / step) * step;
 const fmtNum = (v, step) => (step < 1 ? v.toFixed(String(step).split('.')[1]?.length || 1).replace('.', ',') : fmt(v));
 
+export const IX_KIND = KIND;
+// dipakai Duel: pasang mesin interaktif ke elemen stage
+export function mountEngine(stage, q, api) {
+  return ({ order: orderEngine, words: orderEngine, match: matchEngine, sort: sortEngine, chart: chartEngine, fill: fillEngine, tf: tfEngine, odd: oddEngine }[q.kind] || orderEngine)(stage, q, api);
+}
+
 export function runInteractive(app, practice, { complete, metaHTML, srcHTML, confirmExit }) {
   const qs = practice.questions, n = qs.length;
   const st = { i: 0, results: [], start: Date.now() };

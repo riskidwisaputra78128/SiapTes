@@ -134,7 +134,7 @@ function firestoreBackend(fs) {
       return snap.docs.map(d => ({ uid: d.id, ...d.data() }));
     },
     async listRooms() {
-      const snap = await RM.where('status', 'in', ['waiting', 'playing']).limit(40).get();
+      const snap = await RM.where('status', 'in', ['waiting', 'playing', 'finished']).limit(40).get();
       return snap.docs.map(d => d.data());
     },
     async getMeta(key) { const d = await M.doc(key).get(); return d.exists ? d.data() : null; },
@@ -178,7 +178,7 @@ function memoryBackend() {
     async setPresence(uid, data) { (g.pr ||= new Map()).set(uid, data); },
     async deletePresence(uid) { (g.pr ||= new Map()).delete(uid); },
     async listPresence(sinceMs) { return [...(g.pr || new Map()).entries()].filter(([, v]) => v.lastSeen >= sinceMs).map(([uid, v]) => ({ uid, ...v })); },
-    async listRooms() { return [...(g.rooms || new Map()).values()].filter(r => ['waiting', 'playing'].includes(r.status)).map(r => structuredClone(r)); },
+    async listRooms() { return [...(g.rooms || new Map()).values()].filter(r => ['waiting', 'playing', 'finished'].includes(r.status)).map(r => structuredClone(r)); },
     async getMeta(key) { return g.m.get(key) || null; },
     async setMeta(key, val) { g.m.set(key, val); },
     async getAvatar(id) { return (g.av ||= new Map()).get(id) || null; },

@@ -1,5 +1,6 @@
 import { api, session } from './api.js';
 import { $, $$, esc, toast, timeAgo, confetti, countUp, sheet } from './ui.js';
+import { addDockAction } from './dock.js';
 import { sfx } from './sound.js';
 import { catByKey } from './data.js';
 
@@ -314,10 +315,7 @@ async function renderDetail(app, id) {
   };
   addEventListener('scroll', prog, { passive: true }); prog();
   $('#tutorBtn').onclick = () => openTutor(m);
-  document.body.insertAdjacentHTML('beforeend', '<button class="tutor-fab" id="tutorFab" aria-label="Tanya Mentor AI">🤖<span>Tanya AI</span></button>');
-  $('#tutorFab').onclick = () => openTutor(m);
-  const fabClean = () => { $('#tutorFab')?.remove(); removeEventListener('hashchange', fabClean); };
-  addEventListener('hashchange', fabClean);
+  addDockAction('tutorFab', '🤖<span>Tanya AI</span>', () => openTutor(m), 'Tanya Mentor AI tentang materi ini');
   $('#delMat')?.addEventListener('click', () => askDelete(m, () => { location.hash = '#/materi?tab=arsip&r=1'; }));
   $('#readBtn').onclick = () => {
     markRead(m.id); confetti(50);

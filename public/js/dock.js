@@ -13,8 +13,11 @@ export function mountDock() {
   d.innerHTML = `
     <div class="dock-bubble" id="fbBubble" hidden><button class="db-x" aria-label="Tutup">×</button>
       <b>Ada kritik & saran? 💬</b><span>Ceritain ke admin biar SiapLolos makin mantap!</span><button class="btn sm" id="fbBubbleGo">Tulis sekarang</button></div>
-    <button class="dock-btn" id="musicBtn" aria-label="Musik belajar" title="Musik belajar"><span class="eq"><i></i><i></i><i></i></span><span class="ic">🎵</span></button>
-    <button class="dock-btn" id="fbBtn" aria-label="Kritik & saran" title="Kritik & saran">💬</button>`;
+    <div class="dock-bar" id="dockBar">
+      <button class="dock-btn" id="musicBtn" aria-label="Musik & suara" title="Musik & suara"><span class="eq"><i></i><i></i><i></i></span><span class="ic">🎵</span></button>
+      <span class="dock-sep"></span>
+      <button class="dock-btn" id="fbBtn" aria-label="Kritik & saran" title="Kritik & saran">💬</button>
+    </div>`;
   document.body.appendChild(d);
   const paint = () => d.classList.toggle('playing', sound.music);
   paint(); window.addEventListener('sound:change', paint);
@@ -35,6 +38,16 @@ export function mountDock() {
   }, 15000);
 }
 function hideBubble() { const b = $('#fbBubble'); if (b) b.hidden = true; }
+// tombol tambahan kontekstual (mis. 🤖 Tanya AI di halaman materi) — otomatis hilang saat pindah halaman
+export function addDockAction(id, html, onClick, title = '') {
+  const bar = $('#dockBar'); if (!bar) return null;
+  $('#' + id)?.remove(); $('#' + id + 'Sep')?.remove();
+  bar.insertAdjacentHTML('afterbegin', `<button class="dock-btn ai" id="${id}" title="${esc(title)}" aria-label="${esc(title)}">${html}</button><span class="dock-sep" id="${id}Sep"></span>`);
+  const b = $('#' + id); b.onclick = onClick;
+  const off = () => { b.remove(); $('#' + id + 'Sep')?.remove(); removeEventListener('hashchange', off); };
+  addEventListener('hashchange', off);
+  return b;
+}
 export function setDockVisible(v) { document.body.classList.toggle('no-dock', !v); }
 
 export function openSoundPanel() {

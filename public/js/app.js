@@ -61,6 +61,8 @@ async function route() {
   window.scrollTo(0, 0);
   const inQuiz = path === 'quiz';
   setDockVisible(path !== 'login' && !inQuiz);
+  // di HP, sembunyikan kapsul tombol saat sedang duel agar tidak menutupi soal/keypad
+  document.body.classList.toggle('focus-mode', path === 'duel' && params.has('code'));
   sceneRoute(path);
   if (path === 'hasil') setMood((practice.result?.score ?? 0) >= 60 ? 'happy' : 'calm');
   else setMood(MOOD_OF[path] || 'normal');

@@ -278,3 +278,30 @@ function runCermat(cfg) {
   stopActive = cleanup;
   newKey(); newQ(); tickUI(); sfx('go');
 }
+
+/* ───────── Sprint untuk Duel (tertanam di halaman, bukan overlay) ───────── */
+// type: 'kraepelin' | 'cermat'; onProgress({right, wrong}) dipanggil tiap jawaban
+export function mountSprint(el, { type = 'kraepelin', onProgress }) {
+  const st = { right: 0, wrong: 0 }; let stopped = false;
+  const L = 'ABCDE';
+  if (type === 'kraepelin') {
+    const d = Array.from({ length: 200 }, () => 1 + Math.floor(Math.random() * 9)); let pos = 0;
+    el.innerHTML = `<div class="sprint"><div class="psi-col" id="spCol"></div><div class="psi-pad">${[1, 2, 3, 4, 5, 6, 7, 8, 9, 0].map(n => `<button data-k="${n}">${n}</button>`).join('')}</div></div>`;
+    const col = $('#spCol', el);
+    const draw = () => { let h = ''; for (let i = Math.min(d.length, pos + 6) - 1; i >= Math.max(0, pos - 2); i--) { h += `<div class="psi-n ${i === pos || i === pos + 1 ? 'act' : ''} ${i < pos ? 'past' : ''}">${d[i]}</div>`; if (i === pos + 1) h += '<div class="psi-ans">?</div>'; } col.innerHTML = h; };
+    const ans = k => { if (stopped) return; const ok = (d[pos] + d[pos + 1]) % 10 === k; st[ok ? 'right' : 'wrong']++; if (!ok) { vibrate(25); col.classList.remove('bad'); void col.offsetWidth; col.classList.add('bad'); } else sfx('nav'); pos++; draw(); onProgress?.({ ...st }); };
+    $$('[data-k]', el).forEach(b => b.addEventListener('pointerdown', e => { e.preventDefault(); ans(+b.dataset.k); }));
+    const onKey = e => { if (/^[0-9]$/.test(e.key)) { e.preventDefault(); ans(+e.key); } };
+    addEventListener('keydown', onKey); draw();
+    return { stats: () => ({ ...st }), stop() { stopped = true; removeEventListener('keydown', onKey); $$('button', el).forEach(b => (b.disabled = true)); } };
+  }
+  const key = shuffle(SETS.huruf).slice(0, 5); let q;
+  el.innerHTML = `<div class="sprint"><div class="cm-key">${key.map((k, i) => `<div><b>${k}</b><span>${L[i]}</span></div>`).join('')}</div><div class="cm-q" id="spQ"></div>
+    <div class="psi-pad cm-pad">${[...L].map(l => `<button data-a="${l}">${l}</button>`).join('')}</div></div>`;
+  const nq = () => { const miss = Math.floor(Math.random() * 5); q = { miss }; const e = $('#spQ', el); e.innerHTML = shuffle(key.filter((_, i) => i !== miss)).map(k => `<span>${k}</span>`).join(''); e.classList.remove('in'); void e.offsetWidth; e.classList.add('in'); };
+  const ans = l => { if (stopped) return; const ok = L.indexOf(l) === q.miss; st[ok ? 'right' : 'wrong']++; ok ? sfx('nav') : vibrate(25); nq(); onProgress?.({ ...st }); };
+  $$('[data-a]', el).forEach(b => b.addEventListener('pointerdown', e => { e.preventDefault(); ans(b.dataset.a); }));
+  const onKey = e => { const k = e.key.toUpperCase(); if (k.length === 1 && L.includes(k)) { e.preventDefault(); ans(k); } };
+  addEventListener('keydown', onKey); nq();
+  return { stats: () => ({ ...st }), stop() { stopped = true; removeEventListener('keydown', onKey); $$('button', el).forEach(b => (b.disabled = true)); } };
+}
