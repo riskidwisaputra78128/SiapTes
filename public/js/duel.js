@@ -259,7 +259,14 @@ function renderRoom(app, code, wantView) {
     if (!sameScreen && sprint && (st.phase !== 'question' || st.question?.index !== sprintIdx)) finishSprint();
     lastKey = key;
     if (st.phase === 'waiting') return drawLobby(sameScreen);
-    if (st.phase === 'closed') { root.innerHTML = `<div class="glass card empty"><div style="font-size:40px">🚪</div><p>Host menutup room ini.</p><a class="btn" href="#/duel">Kembali ke lobby</a></div>`; return stopAll(); }
+    if (st.phase === 'closed') {
+      const me = st.players.find(p => p.me);
+      const msg = st.closedReason === 'empty' ? 'Semua peserta sudah keluar, duel dihentikan.' : !st.host.me && st.timing.startAt ? 'Host keluar dari duel — room ditutup.' : st.host.me ? 'Kamu menutup room ini.' : 'Host menutup room ini.';
+      root.innerHTML = `<div class="glass card empty fade-in"><div style="font-size:44px">🚪</div><h2 class="h2" style="margin:6px 0">Room ditutup</h2><p class="muted">${msg}</p>
+        ${me && me.score ? `<p class="dim">Poinmu sampai saat itu: <b>${fmt(me.score)}</b></p>` : ''}<a class="btn" href="#/duel">Kembali ke lobby</a></div>`;
+      sprint?.stop(); sfx('lose'); setMood('calm');
+      return stopAll();
+    }
     if (st.phase === 'countdown') return drawCountdown(sameScreen);
     if (st.phase === 'question') return drawQuestion(sameScreen);
     if (st.phase === 'reveal') return drawReveal(sameScreen);
@@ -268,7 +275,7 @@ function renderRoom(app, code, wantView) {
   function bindCommon() {
     $('#leaveBtn')?.addEventListener('click', () => {
       if (spec() || !st.isMember || st.phase === 'finished') { stopAll(); location.hash = '#/duel'; return; }
-      sheet(`<h3 class="h2">Keluar dari room?</h3><p class="muted">${st.host.me && st.phase === 'waiting' ? 'Kamu host — room akan ditutup untuk semua pemain.' : 'Skormu tetap tercatat, tapi kamu tidak bisa lanjut menjawab.'}</p>
+      sheet(`<h3 class="h2">Keluar dari room?</h3><p class="muted">${st.host.me ? (st.phase === 'waiting' ? 'Kamu host — room akan ditutup untuk semua pemain.' : 'Kamu host — duel akan <b>dihentikan untuk semua pemain</b> dan room ditutup.') : 'Skormu tetap tercatat, tapi kamu tidak bisa lanjut menjawab.'}</p>
         <div class="row" style="margin-top:14px"><button class="btn ghost" data-a="no" style="flex:1">Batal</button><button class="btn warm" data-a="yes" style="flex:1">Keluar</button></div>`,
       (el, close) => {
         $('[data-a=no]', el).onclick = close;

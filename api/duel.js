@@ -172,7 +172,7 @@ function publicView(room, me, now, avs = {}, viewers = 0) {
     mine: room.players[me]?.answers?.[i] ?? null,
   })) : undefined;
   return {
-    code: room.code, title: room.title, status: room.status, phase: tl.phase, visibility: room.visibility, mode: room.mode, psiType: room.psiType || null,
+    code: room.code, title: room.title, status: room.status, phase: tl.phase, closedReason: room.closedReason || null, visibility: room.visibility, mode: room.mode, psiType: room.psiType || null,
     settings: { category: room.category, difficulty: room.difficulty, count: room.questions?.length || room.count, perQ: room.perQ, maxPlayers: room.maxPlayers, bot: room.bot, mode: room.mode },
     host: { name: room.host.name, me: room.host.uid === me },
     players, question, review, viewers,
@@ -217,7 +217,7 @@ export default handle(['GET', 'POST'], async (req, res) => {
     if (!room || room.status === 'archived' && !room.players[user.uid]) throw httpError(404, 'Room tidak ditemukan');
     const tl = timeline(room, now);
     const isMember = !!room.players[user.uid];
-    const wantView = !isMember && tl.phase !== 'waiting' && tl.phase !== 'closed';
+    const wantView = !isMember && tl.phase !== 'waiting' && tl.phase !== 'closed' && room.status !== 'closed';
     const seen = room.viewers?.[user.uid] || 0;
     if ((room.status === 'playing' && tl.phase === 'finished') || (wantView && now - seen > 25000)) {
       try {
@@ -263,7 +263,7 @@ export default handle(['GET', 'POST'], async (req, res) => {
 
   if (action === 'join') {
     const result = await db.updateRoom(code, r => {
-      if (!r || r.status === 'archived') throw httpError(404, 'Room tidak ditemukan. Cek lagi kodenya.');
+      if (!r || r.status === 'archived' || r.status === 'closed') throw httpError(404, r?.status === 'closed' ? 'Room ini sudah ditutup host.' : 'Room tidak ditemukan. Cek lagi kodenya.');
       if (r.players[user.uid]) { r.players[user.uid].left = false; delete r.players[user.uid].leftAt; return { room: r, result: { code } }; }
       if (r.status !== 'waiting') throw httpError(400, 'Duel sudah dimulai — kamu bisa menontonnya lewat "View duel"');
       const count = Object.values(r.players).filter(p => !p.left).length + (r.bot ? 1 : 0);
@@ -277,10 +277,19 @@ export default handle(['GET', 'POST'], async (req, res) => {
   if (action === 'leave') {
     await db.updateRoom(code, r => {
       if (!r || !r.players[user.uid]) return { result: null };
+      const isHost = r.host.uid === user.uid;
       if (r.status === 'waiting') {
-        if (r.host.uid === user.uid) r.status = 'closed';
+        if (isHost) { r.status = 'closed'; r.closedReason = 'host'; }
         else delete r.players[user.uid];
-      } else { r.players[user.uid].left = true; r.players[user.uid].leftAt = Date.now(); }
+      } else {
+        r.players[user.uid].left = true; r.players[user.uid].leftAt = Date.now();
+        // host keluar saat duel berjalan → room ditutup untuk semua & hilang dari daftar
+        if (r.status === 'playing' && timeline(r, Date.now()).phase !== 'finished') {
+          const humansLeft = Object.values(r.players).filter(p => !p.left).length;
+          if (isHost) { r.status = 'closed'; r.closedReason = 'host'; r.closedAt = Date.now(); }
+          else if (!humansLeft) { r.status = 'closed'; r.closedReason = 'empty'; r.closedAt = Date.now(); }
+        }
+      }
       return { room: r, result: null };
     });
     return send(res, 200, { ok: true });

@@ -1304,3 +1304,16 @@ body:has(.start-bar) .dock { bottom: calc(96px + var(--safe-b)); }
   body.focus-mode .dock { display: none; }
 }
 .view-banner { justify-content: flex-start; text-align: left; }
+/* Duel di HP: status ("menjawab", poin ronde, balapan) turun ke bawah nama agar tidak keluar dari kartu */
+.dp { min-width: 0; }
+.dp-ans, .dp-pts { white-space: nowrap; }
+@media (max-width: 560px) {
+  .dp { display: grid; grid-template-columns: 28px auto minmax(0, 1fr) auto; grid-template-areas: "rank av name score" "rank av status score"; column-gap: 10px; row-gap: 2px; align-items: center; padding: 9px 12px; }
+  .dp > .dp-rank { grid-area: rank; }
+  .dp > .av { grid-area: av; }
+  .dp > .dp-name { grid-area: name; align-self: end; }
+  .dp > .dp-ans, .dp > .dp-pts, .dp > .dp-race { grid-area: status; justify-self: start; align-self: start; font-size: 11.5px; }
+  .dp > .dp-race { width: 100%; max-width: none; height: 18px; } .dp-race em { line-height: 18px; font-size: 11px; }
+  .dp > .dp-score { grid-area: score; min-width: 0; font-size: 17px; }
+  .dp:not(:has(.dp-ans, .dp-pts, .dp-race)) > .dp-name { grid-row: 1 / span 2; align-self: center; }
+}
