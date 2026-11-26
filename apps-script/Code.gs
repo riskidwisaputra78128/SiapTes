@@ -58,6 +58,9 @@ function doPost(e) {
       case 'reset': return json(resetPassword(req));
       case 'ping': return json({ ok: true });
       case 'feedback': return json(feedback(req));
+      case 'adminList': return json(adminList(req));
+      case 'adminDelete': return json(adminDelete(req));
+      case 'adminSetPassword': return json(adminSetPassword(req));
       default: return json({ ok: false, error: 'Aksi tidak dikenal' });
     }
   } catch (err) {
@@ -181,6 +184,48 @@ function resetPassword(req) {
   log(email, 'reset', 'ok');
   var v = sh.getRange(row, 1, 1, HEADERS.length).getValues()[0];
   return { ok: true, user: { uid: v[0], name: v[1], email: v[2], target: v[5] } };
+}
+
+/* ───────── Kelola akun dari panel Admin website ─────────
+   (dipanggil server Vercel dengan API_KEY; server sudah memastikan yang meminta adalah admin) */
+function adminList(req) {
+  var sh = sheet();
+  var last = sh.getLastRow();
+  if (last < 2) return { ok: true, users: [] };
+  var rows = sh.getRange(2, 1, last - 1, HEADERS.length).getValues();
+  var users = rows.filter(function (v) { return v[2]; }).map(function (v) {
+    return { uid: String(v[0]), name: String(v[1]), email: String(v[2]), target: String(v[5] || ''),
+      createdAt: v[6] ? new Date(v[6]).getTime() : null, lastLogin: v[7] ? new Date(v[7]).getTime() : null,
+      loginCount: Number(v[8] || 0), status: String(v[9] || 'active') };
+  });
+  return { ok: true, users: users };
+}
+
+function adminDelete(req) {
+  var email = String(req.email || '').trim().toLowerCase();
+  var sh = sheet();
+  var row = findRow(sh, email);
+  if (row < 0) return { ok: false, error: 'Akun tidak ditemukan' };
+  var v = sh.getRange(row, 1, 1, HEADERS.length).getValues()[0];
+  sh.deleteRow(row);
+  log(email, 'adminDelete', 'ok by ' + String(req.by || ''));
+  return { ok: true, user: { uid: String(v[0]), name: String(v[1]), email: String(v[2]) } };
+}
+
+function adminSetPassword(req) {
+  var email = String(req.email || '').trim().toLowerCase();
+  var password = String(req.newPassword || '');
+  if (password.length < 6) return { ok: false, error: 'Kata sandi minimal 6 karakter' };
+  var sh = sheet();
+  var row = findRow(sh, email);
+  if (row < 0) return { ok: false, error: 'Akun tidak ditemukan' };
+  var salt = Utilities.getUuid().replace(/-/g, '');
+  sh.getRange(row, 4, 1, 2).setValues([[salt, hash(password, salt)]]);
+  var cache = CacheService.getScriptCache();
+  ['rc_', 'rt_', 'fail_'].forEach(function (p) { cache.remove(p + email); });
+  log(email, 'adminSetPassword', 'ok by ' + String(req.by || ''));
+  var v = sh.getRange(row, 1, 1, HEADERS.length).getValues()[0];
+  return { ok: true, user: { uid: String(v[0]), name: String(v[1]), email: String(v[2]) } };
 }
 
 /* ───────── Menu admin di Google Sheet ───────── */

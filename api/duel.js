@@ -39,7 +39,7 @@ const BOTS = {
 };
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const ROOM_TTL = 2 * 3600 * 1000;
-const FINISHED_SHOW = 15 * 60 * 1000;  // room selesai masih bisa ditonton (podium) 15 menit
+const FINISHED_SHOW = 10 * 60 * 1000;  // room selesai masih bisa ditonton (podium) 10 menit, selama host belum keluar
 
 const newCode = () => Array.from(crypto.randomBytes(6), b => CODE_CHARS[b % CODE_CHARS.length]).join('');
 const cleanName = s => String(s || 'Peserta').split(' ').slice(0, 2).join(' ').slice(0, 24);
@@ -192,6 +192,26 @@ function listItem(room, now) {
 }
 const countViewers = (room, now) => Object.values(room.viewers || {}).filter(t => now - t < 40000).length;
 
+const humansIn = r => Object.values(r.players).filter(p => !p.left).length;
+// host keluar → room ditutup/diarsipkan; semua manusia keluar → room juga hilang
+function leaveRoom(r, uid) {
+  if (!r || !r.players[uid]) return { result: null };
+  const now = Date.now(), isHost = r.host.uid === uid;
+  if (r.status === 'waiting') {
+    if (isHost) { r.status = 'closed'; r.closedReason = 'host'; }
+    else delete r.players[uid];
+    return { room: r, result: null };
+  }
+  r.players[uid].left = true; r.players[uid].leftAt = now;
+  const finished = r.status === 'finished' || timeline(r, now).phase === 'finished';
+  if (finished) { if (isHost || !humansIn(r)) { r.status = 'archived'; r.finishedAt = r.finishedAt || now; } }
+  else if (r.status === 'playing') {
+    if (isHost) { r.status = 'closed'; r.closedReason = 'host'; r.closedAt = now; }
+    else if (!humansIn(r)) { r.status = 'closed'; r.closedReason = 'empty'; r.closedAt = now; }
+  }
+  return { room: r, result: null };
+}
+
 export default handle(['GET', 'POST'], async (req, res) => {
   const user = requireUser(req);
   const db = await getDB();
@@ -200,11 +220,13 @@ export default handle(['GET', 'POST'], async (req, res) => {
   if (req.method === 'GET') {
     const p = query(req);
     if (p.get('list')) {
-      const all = await db.listRooms();
+      // cache singkat per server agar polling lobby tidak menghabiskan kuota baca Firestore
+      if (!globalThis.__roomsCache || now - globalThis.__roomsCache.at > 6000) globalThis.__roomsCache = { at: now, p: db.listRooms() };
+      const all = await globalThis.__roomsCache.p.catch(e => { globalThis.__roomsCache = null; throw e; });
       // rapikan room lama (best effort) supaya daftar tidak penuh room basi
       const stale = all.filter(r => now - r.createdAt > ROOM_TTL || (timeline(r, now).phase === 'finished' && now - (timeline(r, now).endAt || r.createdAt) > FINISHED_SHOW)).slice(0, 5);
       stale.forEach(r => db.updateRoom(r.code, x => (x ? { room: { ...x, status: 'archived' } } : { result: null })).catch(() => {}));
-      const fresh = all.filter(r => !stale.includes(r));
+      const fresh = all.filter(r => !stale.includes(r) && humansIn(r) > 0 && r.status !== 'closed' && r.status !== 'archived');
       const rooms = fresh.filter(r => r.visibility === 'public').map(r => listItem(r, now))
         .filter(r => r.phase !== 'closed')
         .sort((a, b) => ({ waiting: 0, countdown: 1, question: 1, reveal: 1, finished: 2 }[a.phase] - { waiting: 0, countdown: 1, question: 1, reveal: 1, finished: 2 }[b.phase]) || b.createdAt - a.createdAt)
@@ -258,6 +280,13 @@ export default handle(['GET', 'POST'], async (req, res) => {
     throw httpError(500, 'Gagal membuat kode room, coba lagi');
   }
 
+  // logout → keluar dari semua room yang masih diikuti
+  if (action === 'leaveAll') {
+    const rooms = (await db.listRooms()).filter(r => r.players[user.uid] && !r.players[user.uid].left);
+    await Promise.all(rooms.map(r => db.updateRoom(r.code, x => leaveRoom(x, user.uid)).catch(() => {})));
+    return send(res, 200, { ok: true, left: rooms.length });
+  }
+
   const code = String(b.code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   if (code.length !== 6) throw httpError(400, 'Kode room harus 6 karakter');
 
@@ -275,26 +304,9 @@ export default handle(['GET', 'POST'], async (req, res) => {
   }
 
   if (action === 'leave') {
-    await db.updateRoom(code, r => {
-      if (!r || !r.players[user.uid]) return { result: null };
-      const isHost = r.host.uid === user.uid;
-      if (r.status === 'waiting') {
-        if (isHost) { r.status = 'closed'; r.closedReason = 'host'; }
-        else delete r.players[user.uid];
-      } else {
-        r.players[user.uid].left = true; r.players[user.uid].leftAt = Date.now();
-        // host keluar saat duel berjalan → room ditutup untuk semua & hilang dari daftar
-        if (r.status === 'playing' && timeline(r, Date.now()).phase !== 'finished') {
-          const humansLeft = Object.values(r.players).filter(p => !p.left).length;
-          if (isHost) { r.status = 'closed'; r.closedReason = 'host'; r.closedAt = Date.now(); }
-          else if (!humansLeft) { r.status = 'closed'; r.closedReason = 'empty'; r.closedAt = Date.now(); }
-        }
-      }
-      return { room: r, result: null };
-    });
+    await db.updateRoom(code, r => leaveRoom(r, user.uid));
     return send(res, 200, { ok: true });
   }
-
   if (action === 'start') {
     const room = await db.getRoom(code);
     if (!room) throw httpError(404, 'Room tidak ditemukan');

@@ -1,4 +1,4 @@
-import { api, session } from './api.js';
+import { api, session, getInfo } from './api.js';
 import { $, $$, esc, toast, timeAgo, confetti, countUp, sheet } from './ui.js';
 import { addDockAction } from './dock.js';
 import { sfx } from './sound.js';
@@ -55,7 +55,7 @@ function openTutor(m) {
   const el = document.createElement('aside');
   el.id = 'tutor'; el.className = 'tutor glass';
   el.innerHTML = `
-    <header class="tutor-head"><span class="tutor-av">🤖</span><div style="flex:1;min-width:0"><b>Mentor AI</b><div class="dim tutor-sub">${esc(m.title)}</div></div>
+    <header class="tutor-head"><span class="tutor-av">🤖</span><div style="flex:1;min-width:0"><b>Mentor AI</b><div class="dim tutor-sub">${esc(m.title)}</div><div class="tutor-left" id="tutorLeft"></div></div>
       <button class="tutor-x" aria-label="Tutup">✕</button></header>
     <div class="tutor-log" id="tutorLog"></div>
     <div class="tutor-sug" id="tutorSug"></div>
@@ -77,7 +77,8 @@ function openTutor(m) {
     bubble('me', esc(text)); const wait = bubble('ai typing', '<span></span><span></span><span></span>');
     try {
       const r = await api('/grade', { method: 'POST', body: { action: 'tutor', materialId: m.id, message: text, history: hist } });
-      wait.remove(); bubble('ai', md(r.answer));
+      wait.remove(); bubble('ai', md(r.answer) + (r.cached ? '<small class="tmsg-tag">⚡ jawaban tersimpan · tidak mengurangi jatah</small>' : ''));
+      if (r.left != null) $('#tutorLeft', el).textContent = `Sisa ${r.left} pertanyaan hari ini`;
       hist.push({ role: 'me', text }, { role: 'ai', text: r.answer }); hist = hist.slice(-12);
       try { sessionStorage.setItem(key, JSON.stringify(hist)); } catch {}
       chips(r.followups?.length ? r.followups : STARTERS.slice(0, 2));
@@ -227,7 +228,7 @@ async function renderDetail(app, id) {
         </div>
         <h1 class="h1" style="margin-top:12px">${esc(m.title)}</h1>
         <p class="muted" style="margin:0;font-size:16px">${esc(m.summary)}</p>
-        <button class="btn sm tutor-cta" id="tutorBtn" style="margin-top:14px">🤖 Tanya Mentor AI tentang materi ini</button>
+        <button class="btn sm tutor-cta" id="tutorBtn" style="margin-top:14px" hidden>🤖 Tanya Mentor AI tentang materi ini</button>
       </div>
     </header>
 
@@ -314,8 +315,12 @@ async function renderDetail(app, id) {
     el.style.width = (h > 0 ? Math.min(100, (scrollY / h) * 100) : 100) + '%';
   };
   addEventListener('scroll', prog, { passive: true }); prog();
-  $('#tutorBtn').onclick = () => openTutor(m);
-  addDockAction('tutorFab', '🤖<span>Tanya AI</span>', () => openTutor(m), 'Tanya Mentor AI tentang materi ini');
+  // tombol Mentor AI hanya tampil bila diaktifkan admin
+  getInfo().then(d => {
+    if (d?.settings?.tutorEnabled === false || !document.body.contains($('#tutorBtn'))) return;
+    $('#tutorBtn').hidden = false; $('#tutorBtn').onclick = () => openTutor(m);
+    addDockAction('tutorFab', '🤖<span>Tanya AI</span>', () => openTutor(m), 'Tanya Mentor AI tentang materi ini');
+  }).catch(() => {});
   $('#delMat')?.addEventListener('click', () => askDelete(m, () => { location.hash = '#/materi?tab=arsip&r=1'; }));
   $('#readBtn').onclick = () => {
     markRead(m.id); confetti(50);

@@ -96,6 +96,10 @@ function firestoreBackend(fs) {
       const snap = await MT.orderBy('createdAt', 'desc').limit(limit).get();
       return snap.docs.map(d => d.data());
     },
+    async listMaterialsSince(ms, limit = 10) {
+      const snap = await MT.where('createdAt', '>=', ms).orderBy('createdAt', 'desc').limit(limit).get();
+      return snap.docs.map(d => d.data());
+    },
     async getMaterial(id) { const d = await MT.doc(id).get(); return d.exists ? d.data() : null; },
     async updateMaterial(id, fields) { await MT.doc(id).set(fields, { merge: true }); },
     async deleteMaterial(id) { await MT.doc(id).delete(); },
@@ -109,6 +113,16 @@ function firestoreBackend(fs) {
       if (!del.length) return 0;
       const batch = fs.batch(); del.forEach(r => batch.delete(r)); await batch.commit();
       return del.length;
+    },
+    async deleteAttemptsByUser(uid) {
+      let n = 0;
+      for (;;) {
+        const snap = await A.where('uid', '==', uid).limit(400).get();
+        if (snap.empty) break;
+        const batch = fs.batch(); snap.docs.forEach(d => batch.delete(d.ref)); await batch.commit(); n += snap.size;
+        if (snap.size < 400) break;
+      }
+      return n;
     },
     async getRoom(code) { const d = await RM.doc(code).get(); return d.exists ? d.data() : null; },
     async createRoom(room) {
@@ -165,6 +179,7 @@ function memoryBackend() {
     async listAttemptsSince(sinceMs) { return g.a.filter(a => a.createdAt >= sinceMs); },
     async addMaterials(list) { for (const m of list) g.mt.set(m.id, m); return list.length; },
     async listMaterials(limit = 60) { return [...(g.mt || new Map()).values()].sort((a, b) => b.createdAt - a.createdAt).slice(0, limit); },
+    async listMaterialsSince(ms, limit = 10) { return [...(g.mt || new Map()).values()].filter(m => m.createdAt >= ms).sort((a, b) => b.createdAt - a.createdAt).slice(0, limit); },
     async getMaterial(id) { return (g.mt || new Map()).get(id) || null; },
     async updateMaterial(id, fields) { const m = g.mt.get(id); if (m) g.mt.set(id, { ...m, ...fields }); },
     async deleteMaterial(id) { g.mt.delete(id); },
@@ -172,6 +187,7 @@ function memoryBackend() {
     async listFeedback(limit = 60) { return (g.fb || []).slice(0, limit); },
     async updateFeedback(id, fields) { const f = (g.fb || []).find(x => x.id === id); if (f) Object.assign(f, fields); },
     async pruneMaterials(max) { const all = [...(g.mt || new Map()).values()].sort((a, b) => b.createdAt - a.createdAt); let kept = 0, n = 0; all.forEach(m => { if (!m.title || !m.category || ++kept > max) { g.mt.delete(m.id); n++; } }); return n; },
+    async deleteAttemptsByUser(uid) { const n = g.a.length; g.a = g.a.filter(a => a.uid !== uid); return n - g.a.length; },
     async getRoom(code) { const r = (g.rooms ||= new Map()).get(code); return r ? structuredClone(r) : null; },
     async createRoom(room) { g.rooms ||= new Map(); if (g.rooms.has(room.code)) return false; g.rooms.set(room.code, structuredClone(room)); return true; },
     async updateRoom(code, fn) { g.rooms ||= new Map(); const cur = g.rooms.get(code); const out = fn(cur ? structuredClone(cur) : null); if (out.room) g.rooms.set(code, out.room); return out.result; },

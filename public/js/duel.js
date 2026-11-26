@@ -115,7 +115,7 @@ function renderLobby(app) {
     } catch (e) { $('#roomList').innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
     return true;
   };
-  const loop = async () => { if (await load()) setTimeout(() => !document.hidden ? loop() : setTimeout(loop, 5000), 5000); };
+  const loop = async () => { if (await load()) setTimeout(() => !document.hidden ? loop() : setTimeout(loop, 8000), 8000); };
   loop();
 }
 
@@ -183,7 +183,12 @@ function renderRoom(app, code, wantView) {
   const root = $('#duelRoom');
   const sched = ms => { clearTimeout(timer); timer = setTimeout(poll, ms); };
   const stopAll = () => { alive = false; clearTimeout(timer); cancelAnimationFrame(raf); sprint?.stop(); setDuelPresence(null); };
-  const onHash = () => { if (!document.body.contains(root)) { stopAll(); removeEventListener('hashchange', onHash); } };
+  const onHash = () => {
+    if (document.body.contains(root)) return;
+    // pindah halaman setelah duel selesai = keluar room (room hilang dari daftar bila host/semua sudah keluar)
+    if (st?.isMember && st.phase === 'finished') api('/duel', { method: 'POST', body: { action: 'leave', code } }).catch(() => {});
+    stopAll(); removeEventListener('hashchange', onHash);
+  };
   addEventListener('hashchange', onHash);
   const spec = () => !!st?.spectator;
 
@@ -213,7 +218,7 @@ function renderRoom(app, code, wantView) {
     try { draw(); } catch (e) { console.error('duel draw', e); }
     setDuelPresence(d.isMember && d.phase === 'waiting' && d.visibility === 'public' ? code : null);
     const fast = ['countdown', 'question', 'reveal'].includes(st.phase);
-    sched(fast ? 1100 : st.phase === 'finished' ? 20000 : 2000);
+    sched(fast ? (st.spectator ? 2000 : 1300) : st.phase === 'finished' ? 30000 : 2500);
   }
 
   function header() {
@@ -274,7 +279,8 @@ function renderRoom(app, code, wantView) {
   }
   function bindCommon() {
     $('#leaveBtn')?.addEventListener('click', () => {
-      if (spec() || !st.isMember || st.phase === 'finished') { stopAll(); location.hash = '#/duel'; return; }
+      if (spec() || !st.isMember) { stopAll(); location.hash = '#/duel'; return; }
+      if (st.phase === 'finished') { stopAll(); api('/duel', { method: 'POST', body: { action: 'leave', code } }).catch(() => {}); location.hash = '#/duel'; return; }
       sheet(`<h3 class="h2">Keluar dari room?</h3><p class="muted">${st.host.me ? (st.phase === 'waiting' ? 'Kamu host — room akan ditutup untuk semua pemain.' : 'Kamu host — duel akan <b>dihentikan untuk semua pemain</b> dan room ditutup.') : 'Skormu tetap tercatat, tapi kamu tidak bisa lanjut menjawab.'}</p>
         <div class="row" style="margin-top:14px"><button class="btn ghost" data-a="no" style="flex:1">Batal</button><button class="btn warm" data-a="yes" style="flex:1">Keluar</button></div>`,
       (el, close) => {

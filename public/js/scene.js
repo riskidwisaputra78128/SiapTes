@@ -16,13 +16,15 @@ const SCENES = {
   malam: { paint: 'malam', fx: ['fog', 'fireflies'] },
   pagi: { paint: 'pagi', fx: ['fog', 'birds'] },
   sakura: { img: '/media/sakura.jpg', mob: '/media/sakura-m.jpg', mask: '/media/sakura-mask.png', fx: ['petals'] },
+  shinobi: { three: true, fx: [] },   // 3D: hutan bambu senja + Kiro si kucing ninja
+  kosmik: { three: true, fx: [] },    // 3D: luar angkasa + Nova si robot penjaga
 };
 export const SCENE_THEMES = Object.keys(SCENES);
 import { fxLevel } from './perf.js';
 const SMALL = () => innerWidth < 760;
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-let root = null, cur = null, alive = false, cleanups = [];
+let root = null, cur = null, alive = false, cleanups = [], three = null;
 const listen = (t, e, f, o) => { t.addEventListener(e, f, o); cleanups.push(() => t.removeEventListener(e, f, o)); };
 
 async function exists(url) {
@@ -38,6 +40,16 @@ function mount(key) {
   const S = SCENES[key]; cur = key; alive = true;
   root = document.createElement('div');
   root.id = 'scene'; root.dataset.scene = key; root.setAttribute('aria-hidden', 'true');
+  if (S.three) {
+    root.innerHTML = '<div class="sc-tint"></div><div class="sc-vig"></div>';
+    document.body.prepend(root);
+    const FX3 = fxLevel(); root.dataset.fx = FX3;
+    import('./scene3d.js').then(m => m.mount3D(root, key, FX3)).then(h => {
+      if (!alive || cur !== key) { h?.destroy(); return; }
+      three = h; if (!h) root.classList.add('no-3d', 'ready');
+    }).catch(() => root?.classList.add('no-3d', 'ready'));
+    return;
+  }
   root.innerHTML = `<div class="sc-par"><div class="sc-kb"></div></div><div class="sc-tint"></div>
     ${S.fx.includes('fog') ? '<div class="sc-fog f1"></div><div class="sc-fog f2"></div>' : ''}
     <canvas class="sc-fx"></canvas><div class="sc-vig"></div>`;
@@ -60,6 +72,7 @@ function mount(key) {
 
 function unmount() {
   alive = false; cleanups.forEach(f => f()); cleanups = [];
+  three?.destroy(); three = null;
   root?.remove(); root = null; cur = null;
 }
 

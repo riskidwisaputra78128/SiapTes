@@ -596,11 +596,25 @@ function renderProfile() {
       <p class="dim" style="margin:8px 0 0">💡 Jalankan satu per satu, beri jeda ±1 menit agar kuota Gemini tidak cepat habis.</p>
       <pre id="genOut" class="dim" style="white-space:pre-wrap;margin:12px 0 0"></pre><div id="genLinks"></div>
     </div>
+    <div class="glass card" id="accCard">
+      <div class="row between wrap" style="gap:10px"><h2 class="h2" style="margin:0">👥 Kelola akun</h2><span class="chip" id="accTotal">…</span></div>
+      <p class="muted" style="margin:6px 0 10px">Daftar semua akun terdaftar. Admin bisa mengganti kata sandi akun mana pun tanpa kode email, atau menghapus akun beserta riwayat latihan & peringkatnya.</p>
+      <div class="row" style="gap:8px"><input class="input" id="accQ" placeholder="Cari nama atau email…" style="flex:1"><button class="btn ghost sm" id="accReload" title="Muat ulang">↻</button></div>
+      <div id="accList" class="acc-list"><div class="skeleton" style="height:120px"></div></div>
+    </div>
     <div class="glass card">
       <h2 class="h2">🎨 Tema default pengguna</h2>
       <p class="muted" style="margin:6px 0 10px">Tema yang dilihat pengguna baru & pengguna yang belum memilih tema sendiri. Pengguna tetap bisa mengganti tema lewat tombol 🎨.</p>
       <div class="theme-grid admin-theme" id="defTheme">${THEMES.map(t => `<button class="theme-opt" data-dt="${t.key}"><div class="theme-prev" style="background:${t.prev.bg}"><span class="card-mini" style="background:${t.prev.card}"></span><i style="width:40%;background:${t.prev.a}"></i><i style="width:25%;background:${t.prev.b}"></i></div><div class="theme-meta"><b>${t.ico} ${t.name}</b></div></button>`).join('')}</div>
       <div class="dim" id="defThemeInfo" style="margin-top:8px"></div>
+    </div>
+    <div class="glass card">
+      <div class="row between wrap" style="gap:10px"><h2 class="h2" style="margin:0">🤖 Mentor AI di materi</h2>
+        <label class="row" style="gap:8px;cursor:pointer"><input type="checkbox" class="switch" id="tutorOn"><b id="tutorOnTxt">…</b></label></div>
+      <p class="muted" style="margin:6px 0 10px">Mentor AI memakai kuota Gemini yang sama dengan generate. Matikan bila kuota sedang menipis. Jawaban untuk 4 pertanyaan saran disimpan dan dipakai ulang untuk semua pengguna, jadi tidak memakai kuota lagi dan tidak mengurangi jatah harian.</p>
+      <div class="dim psi-lbl">Batas pertanyaan per pengguna per hari</div>
+      <div class="pill-group" id="tutorDaily">${[5, 10, 20, 40, 60].map(n => `<button class="pill" data-td="${n}">${n}</button>`).join('')}</div>
+      <div class="dim" id="tutorInfo" style="margin-top:8px"></div>
     </div>
     <div class="glass card">
       <h2 class="h2">🧹 Hapus soal massal</h2>
@@ -638,7 +652,11 @@ function renderProfile() {
   const paintFx = () => { $$('#fxPick [data-fx]').forEach(b => b.classList.toggle('on', b.dataset.fx === fxChoice())); const a = $('#fxAutoName'); if (a) a.textContent = FX_LEVELS.find(f => f.key === autoFx()).name; };
   $$('#fxPick [data-fx]').forEach(b => (b.onclick = () => { setFx(b.dataset.fx); paintFx(); toast('Animasi latar: ' + b.textContent.trim(), 'ok'); }));
   paintFx();
-  $('#logoutBtn').onclick = () => { session.clear(); toast('Kamu telah keluar'); location.hash = '#/login'; };
+  $('#logoutBtn').onclick = async () => {
+    $('#logoutBtn').disabled = true;
+    await Promise.race([api('/duel', { method: 'POST', body: { action: 'leaveAll' } }).catch(() => {}), new Promise(r => setTimeout(r, 2500))]);   // keluar dari room duel yang masih diikuti
+    session.clear(); toast('Kamu telah keluar'); location.hash = '#/login';
+  };
   api('/stats').then(s => {
     const v = [s.summary.allTime.questions, s.summary.allTime.accuracy, s.summary.allTime.points];
     $$('#profStats .v').forEach((el, i) => (el.textContent = i === 1 ? v[i] + '%' : fmt(v[i])));
@@ -671,6 +689,98 @@ function renderProfile() {
       try { await api('/presence?op=settings', { method: 'POST', body: { defaultTheme: k } }); paintDef(k); applyServerDefault(k); toast('Tema default disimpan untuk semua pengguna', 'ok'); }
       catch (e) { toast(e.message, 'err'); } finally { b.disabled = false; }
     }));
+    // ── Kelola akun ──
+    let accAll = [];
+    const fmtD = ms => ms ? new Date(ms).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+    const paintAcc = () => {
+      const q = $('#accQ').value.trim().toLowerCase();
+      const list = accAll.filter(u => !q || u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q));
+      $('#accTotal').textContent = `${accAll.length} akun`;
+      $('#accList').innerHTML = list.length ? list.map(u => `
+        <div class="acc-row">
+          ${avatar(u, 'md')}
+          <div class="acc-main"><b>${esc(u.name)}${u.me ? ' <span class="chip sm">kamu</span>' : ''}${u.admin ? ' <span class="chip sm acc-adm">admin</span>' : ''}${u.online ? ' <span class="acc-on" title="Sedang online"></span>' : ''}</b>
+            <span class="dim">${esc(u.email)}${u.target ? ' · 🎯 ' + esc(u.target) : ''}</span>
+            <span class="dim acc-meta">Daftar ${fmtD(u.createdAt)} · Login terakhir ${fmtD(u.lastLogin)} · ${u.loginCount || 0}× login</span></div>
+          <div class="acc-act"><button class="btn ghost sm" data-pw="${esc(u.email)}">🔑 Ganti sandi</button>
+            ${u.me || u.admin ? '' : `<button class="btn ghost sm acc-del" data-del="${esc(u.email)}">🗑️ Hapus</button>`}</div>
+        </div>`).join('') : `<div class="empty">${q ? 'Tidak ada akun yang cocok.' : 'Belum ada akun.'}</div>`;
+      $$('#accList [data-pw]').forEach(b => (b.onclick = () => accPassword(accAll.find(u => u.email === b.dataset.pw))));
+      $$('#accList [data-del]').forEach(b => (b.onclick = () => accDelete(accAll.find(u => u.email === b.dataset.del))));
+    };
+    const loadAcc = async () => {
+      $('#accList').innerHTML = '<div class="skeleton" style="height:120px"></div>';
+      try { accAll = (await api('/auth', { method: 'POST', body: { action: 'admin-list' } })).users; paintAcc(); }
+      catch (e) { $('#accTotal').textContent = '—'; $('#accList').innerHTML = `<div class="empty">⚠️ ${esc(e.message)}</div>`; }
+    };
+    const genPw = () => { const c = 'abcdefghjkmnpqrstuvwxyz23456789'; return Array.from(crypto.getRandomValues(new Uint8Array(8)), x => c[x % c.length]).join(''); };
+    function accPassword(u) {
+      if (!u) return;
+      sheet(`<h3 class="h2">🔑 Ganti kata sandi</h3>
+        <p class="muted" style="margin:6px 0 12px"><b>${esc(u.name)}</b> · ${esc(u.email)}<br>Kata sandi langsung berubah tanpa kode email.${u.me ? '' : ' Sesi login pemilik akun di semua perangkat akan dikeluarkan.'}</p>
+        <div class="field"><label>Kata sandi baru (min. 6 karakter)</label>
+          <div class="row" style="gap:8px"><input class="input" id="npw" type="text" minlength="6" maxlength="64" autocomplete="off" style="flex:1"><button class="btn ghost sm" id="npwGen" type="button">🎲 Acak</button></div></div>
+        <p class="dim" id="npwErr" style="color:var(--red);min-height:18px;margin:6px 0"></p>
+        <div class="row" style="gap:8px"><button class="btn ghost" data-x style="flex:1">Batal</button><button class="btn" id="npwGo" style="flex:1">Simpan sandi</button></div>`,
+      (el, close) => {
+        const inp = $('#npw', el); inp.value = genPw(); inp.select();
+        $('#npwGen', el).onclick = () => { inp.value = genPw(); $('#npwErr', el).textContent = ''; };
+        inp.oninput = () => ($('#npwErr', el).textContent = '');
+        $('[data-x]', el).onclick = close;
+        $('#npwGo', el).onclick = async () => {
+          const pw = inp.value.trim();
+          if (pw.length < 6) { $('#npwErr', el).textContent = 'Kata sandi minimal 6 karakter'; return; }
+          const b = $('#npwGo', el); b.disabled = true; b.innerHTML = '<span class="spinner"></span>';
+          try {
+            await api('/auth', { method: 'POST', body: { action: 'admin-password', email: u.email, password: pw } });
+            el.innerHTML = `<h3 class="h2">✅ Kata sandi diganti</h3><p class="muted">Berikan kata sandi baru ini ke <b>${esc(u.name)}</b>:</p>
+              <div class="pw-box"><code id="pwShow">${esc(pw)}</code><button class="btn ghost sm" id="pwCopy">Salin</button></div>
+              <p class="dim" style="font-size:12.5px">Kata sandi hanya ditampilkan sekali ini. Sarankan pengguna menggantinya lewat "Lupa kata sandi" setelah masuk.</p>
+              <button class="btn block" data-x>Selesai</button>`;
+            $('#pwCopy', el).onclick = async () => { try { await navigator.clipboard.writeText(pw); toast('Disalin', 'ok'); } catch { toast(pw); } };
+            $('[data-x]', el).onclick = close;
+          } catch (e) { $('#npwErr', el).textContent = e.message; b.disabled = false; b.textContent = 'Simpan sandi'; }
+        };
+      });
+    }
+    function accDelete(u) {
+      if (!u) return;
+      sheet(`<h3 class="h2">🗑️ Hapus akun?</h3>
+        <p class="muted" style="margin:6px 0 10px">Akun <b>${esc(u.name)}</b> (${esc(u.email)}) akan dihapus permanen dari website:</p>
+        <ul class="muted" style="margin:0 0 10px;padding-left:18px;font-size:14px"><li>tidak bisa login lagi & sesi aktifnya langsung berakhir</li><li>riwayat latihan, evaluasi & poin peringkatnya dihapus</li><li>foto profil dihapus</li></ul>
+        <div class="field"><label>Ketik <b>HAPUS</b> untuk konfirmasi</label><input class="input" id="delConf" autocomplete="off"></div>
+        <p class="dim" id="delErr" style="color:var(--red);min-height:18px;margin:6px 0"></p>
+        <div class="row" style="gap:8px"><button class="btn ghost" data-x style="flex:1">Batal</button><button class="btn warm" id="delGo" style="flex:1" disabled>Hapus akun</button></div>`,
+      (el, close) => {
+        const c = $('#delConf', el); c.oninput = () => ($('#delGo', el).disabled = c.value.trim().toUpperCase() !== 'HAPUS');
+        $('[data-x]', el).onclick = close;
+        $('#delGo', el).onclick = async () => {
+          const b = $('#delGo', el); b.disabled = true; b.innerHTML = '<span class="spinner"></span>';
+          try {
+            const r = await api('/auth', { method: 'POST', body: { action: 'admin-delete', email: u.email } });
+            close(); toast(`Akun ${u.name} dihapus${r.attempts ? ` (+${r.attempts} riwayat latihan)` : ''}`, 'ok');
+            accAll = accAll.filter(x => x.email !== u.email); paintAcc();
+          } catch (e) { $('#delErr', el).textContent = e.message; b.disabled = false; b.textContent = 'Hapus akun'; }
+        };
+      });
+    }
+    $('#accQ').oninput = paintAcc;
+    $('#accReload').onclick = loadAcc;
+    loadAcc();
+    // ── Mentor AI ──
+    const paintTutor = (on, n) => {
+      $('#tutorOn').checked = on; $('#tutorOnTxt').textContent = on ? 'Aktif' : 'Nonaktif';
+      $$('#tutorDaily [data-td]').forEach(b => b.classList.toggle('on', +b.dataset.td === n));
+      $('#tutorInfo').textContent = on ? `Setiap pengguna bisa bertanya ${n}× per hari (di luar pertanyaan saran).` : 'Tombol Mentor AI disembunyikan dari semua halaman materi.';
+    };
+    let tCfg = { on: true, n: 20 };
+    getInfo().then(d => { tCfg = { on: d?.settings?.tutorEnabled !== false, n: d?.settings?.tutorDaily || 20 }; paintTutor(tCfg.on, tCfg.n); }).catch(() => {});
+    const saveTutor = async (patch, msg) => {
+      try { await api('/presence?op=settings', { method: 'POST', body: patch }); Object.assign(tCfg, patch.tutorEnabled !== undefined ? { on: patch.tutorEnabled } : {}, patch.tutorDaily ? { n: patch.tutorDaily } : {}); paintTutor(tCfg.on, tCfg.n); getInfo(true).catch(() => {}); toast(msg, 'ok'); }
+      catch (e) { toast(e.message, 'err'); paintTutor(tCfg.on, tCfg.n); }
+    };
+    $('#tutorOn').onchange = e => saveTutor({ tutorEnabled: e.target.checked }, e.target.checked ? 'Mentor AI diaktifkan' : 'Mentor AI dinonaktifkan');
+    $$('#tutorDaily [data-td]').forEach(b => (b.onclick = () => saveTutor({ tutorDaily: +b.dataset.td }, `Batas harian: ${b.dataset.td} pertanyaan`)));
     // ── Hapus soal massal ──
     const pN = () => +$('#purgeN').value;
     $('#purgeN').oninput = () => { $('#purgeNT').textContent = pN() + ' soal'; $('#purgeOut').innerHTML = ''; };

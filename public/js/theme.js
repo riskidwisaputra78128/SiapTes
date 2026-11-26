@@ -19,6 +19,10 @@ export const THEMES = [
     prev: { bg: 'linear-gradient(180deg,#5ea9e6,#9fd1f3 45%,#dff1fb 75%,#9ccf72)', card: 'rgba(255,255,255,.7)', a: '#16a34a', b: '#0284c7' } },
   { key: 'sakura', name: 'Sakura', ico: '🌸', desc: 'Kastil & sakura 3D, pohon bergoyang', meta: '#fdf2f6',
     prev: { bg: 'linear-gradient(180deg,#a9c4e8,#e9eef7 50%,#f6c6d8)', card: 'rgba(255,255,255,.7)', a: '#e0567f', b: '#7c6fd6' } },
+  { key: 'shinobi', name: 'Shinobi Senja', ico: '🥷', desc: 'Hutan bambu 3D, Kiro si kucing ninja', meta: '#241a3a', sound: 'shinobi',
+    prev: { bg: 'radial-gradient(circle at 78% 30%,#ffe2a8 0 9%,transparent 10%),linear-gradient(180deg,#241a4a,#a8486a 55%,#f08a5d)', card: 'rgba(36,20,46,.7)', a: '#e84a5f', b: '#f2c46b' } },
+  { key: 'kosmik', name: 'Pahlawan Kosmik', ico: '🛡️', desc: 'Luar angkasa 3D, Nova si robot penjaga', meta: '#070b1f', sound: 'kosmik',
+    prev: { bg: 'radial-gradient(circle at 75% 35%,#3b4bd6 0 14%,transparent 15%),radial-gradient(circle at 20% 70%,rgba(120,80,255,.5),transparent 40%),#070b1f', card: 'rgba(15,23,60,.75)', a: '#38bdf8', b: '#fbbf24' } },
   { key: 'pro', name: 'Profesional', ico: '💼', desc: 'Navy elegan ala korporat', meta: '#f5f6f8',
     prev: { bg: '#f5f6f8', card: '#ffffff', a: '#1e3a8a', b: '#b7791f' } },
 ];

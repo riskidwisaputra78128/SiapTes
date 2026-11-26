@@ -37,10 +37,23 @@ export function query(req) {
   return new URL(req.url, 'http://localhost').searchParams;
 }
 
+// tolak token milik akun yang sudah dihapus / sandinya diganti admin
+async function checkRevoked(req) {
+  const h = req.headers?.authorization || '';
+  if (!h.startsWith('Bearer ')) return;
+  const { verifyToken, tokenIat, uidKey, revokedMap } = await import('./auth.js');
+  const data = verifyToken(h.slice(7));
+  if (!data) return;
+  const { getDB } = await import('./db.js');
+  const at = (await revokedMap(await getDB()))[uidKey(data.uid)];
+  if (at && tokenIat(data) < at) throw httpError(401, 'Sesi berakhir: akunmu dihapus atau kata sandinya diganti admin. Silakan masuk lagi.');
+}
+
 export function handle(methods, fn) {
   return async (req, res) => {
     try {
       if (!methods.includes(req.method)) throw httpError(405, 'Metode tidak didukung');
+      await checkRevoked(req);
       await fn(req, res);
     } catch (e) {
       if (!e.expose) console.error(e);

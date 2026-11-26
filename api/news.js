@@ -55,7 +55,7 @@ export default handle(['GET'], async (req, res) => {
     }));
     if (items.length) { news = { at: Date.now(), items }; db.setMeta('news3', news).catch(() => {}); }
   }
-  const [last, bank, settings, mats] = await Promise.all([db.getMeta('lastGenerate').catch(() => null), questionBank(db), db.getMeta('settings').catch(() => null), db.listMaterials(90).catch(() => [])]);
+  const [last, bank, settings, mats] = await Promise.all([db.getMeta('lastGenerate').catch(() => null), questionBank(db), db.getMeta('settings').catch(() => null), db.listMaterialsSince(startOfDayWIB(Date.now()), 10).catch(() => [])]);   // hemat kuota: hanya materi hari ini (maks 10 dokumen)
   // ringkasan update hari ini (untuk pop-up harian setelah login)
   const sod = startOfDayWIB(Date.now());
   const newMats = mats.filter(m => m.title && m.createdAt >= sod);
@@ -75,7 +75,7 @@ export default handle(['GET'], async (req, res) => {
     updatedAt: news?.at || null,
     bank,
     daily,
-    settings: { defaultTheme: settings?.defaultTheme || 'dark' },
+    settings: { defaultTheme: settings?.defaultTheme || 'dark', tutorEnabled: settings?.tutorEnabled !== false, tutorDaily: settings?.tutorDaily || 20 },
     status: { firebase: firebaseEnabled(), ai: aiEnabled(), generatedQuestions: bank.generated, lastGenerate: last, models },
   });
 });

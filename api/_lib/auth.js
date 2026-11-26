@@ -46,6 +46,20 @@ export function requireUser(req) {
   return u;
 }
 
+// ───── Pencabutan sesi (akun dihapus / sandi diganti admin) ─────
+// Token tidak punya "iat", tapi umurnya selalu TOKEN_DAYS → iat = exp − TOKEN_DAYS.
+export const tokenIat = data => (data?.exp || 0) - TOKEN_DAYS * 86400000;
+export const uidKey = uid => crypto.createHash('sha1').update(String(uid)).digest('hex').slice(0, 20);
+let revCache = { at: 0, map: {} };
+export async function revokedMap(db, fresh = false) {
+  if (fresh || Date.now() - revCache.at > 20000) revCache = { at: Date.now(), map: (await db.getMeta('revoked').catch(() => null)) || {} };
+  return revCache.map;
+}
+export async function revokeSessions(db, uid) {
+  await db.setMetaField('revoked', uidKey(uid), Date.now());
+  revCache.at = 0;
+}
+
 export function isAdmin(u) {
   if (!u) return false;
   const list = (process.env.ADMIN_EMAILS || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);

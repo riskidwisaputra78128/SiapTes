@@ -96,7 +96,7 @@ export async function initBackground(canvas) {
     if (lvl === 'off' && lastT) return;
     if (lvl === 'lite' && nowT - lastT < 33) { requestAnimationFrame(loop); return; }
     lastT = nowT;
-    if (window.__bgPause || ['senja', 'fajar', 'malam', 'pagi', 'sakura'].includes(document.documentElement.getAttribute('data-theme'))) { setTimeout(() => requestAnimationFrame(loop), 600); return; } // halaman 3D lain sedang aktif
+    if (window.__bgPause || ['senja', 'fajar', 'malam', 'pagi', 'sakura', 'shinobi', 'kosmik'].includes(document.documentElement.getAttribute('data-theme'))) { setTimeout(() => requestAnimationFrame(loop), 600); return; } // halaman 3D lain sedang aktif
     const t = clock.getElapsedTime();
     mx += (tx - mx) * 0.04; my += (ty - my) * 0.04;
     burst *= 0.94;
