@@ -75,7 +75,7 @@ export default handle(['GET'], async (req, res) => {
     updatedAt: news?.at || null,
     bank,
     daily,
-    settings: { defaultTheme: settings?.defaultTheme || 'dark' },
+    settings: { defaultTheme: settings?.defaultTheme || 'dark', tutorEnabled: settings?.tutorEnabled !== false, tutorDaily: settings?.tutorDaily || 20 },
     status: { firebase: firebaseEnabled(), ai: aiEnabled(), generatedQuestions: bank.generated, lastGenerate: last, models },
   });
 });
