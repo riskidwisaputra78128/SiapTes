@@ -32,7 +32,14 @@ async function init() {
   const fs = getFirestore(app);
   // Firestore menolak nilai `undefined` — abaikan saja field yang kosong
   try { fs.settings({ ignoreUndefinedProperties: true }); } catch {}
-  return firestoreBackend(fs);
+  // semua panggilan Firestore dibungkus: bila kuota habis, tandai agar pengguna diberi tahu "server penuh"
+  const { isQuotaErr, markQuota } = await import('./http.js');
+  const be = firestoreBackend(fs);
+  for (const [k, fn] of Object.entries(be)) {
+    if (typeof fn !== 'function') continue;
+    be[k] = async (...a) => { try { return await fn.apply(be, a); } catch (e) { if (isQuotaErr(e)) markQuota(); throw e; } };
+  }
+  return be;
 }
 
 function firestoreBackend(fs) {

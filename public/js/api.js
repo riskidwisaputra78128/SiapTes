@@ -32,6 +32,8 @@ export async function api(path, { method = 'GET', body } = {}) {
   }
   let data = {};
   try { data = await r.json(); } catch {}
+  if (r.headers.get('X-Server-Busy') || data.serverBusy) window.dispatchEvent(new Event('server:busy'));
+  else if (r.ok) window.dispatchEvent(new Event('server:ok'));
   if (r.status === 401 && session.token && path !== '/auth') {
     session.clear();
     window.dispatchEvent(new Event('auth:expired'));

@@ -866,3 +866,32 @@ window.addEventListener('hashchange', () => { if (session.loggedIn) startPresenc
 $('#themeBtn').onclick = openThemePicker;
 route();
 initBackground($('#bg3d'));
+
+/* ───────── Pemberitahuan "server sedang penuh" (kuota harian database gratis habis) ───────── */
+(() => {
+  let lastBusy = 0;
+  // kuota Firestore reset tiap tengah malam waktu Pasifik (Amerika) → hitung jamnya dalam WIB
+  const resetWIB = () => {
+    const now = new Date();
+    const la = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
+    const msToMidnight = (24 * 3600e3) - ((la.getHours() * 60 + la.getMinutes()) * 60e3 + la.getSeconds() * 1e3);
+    const at = new Date(now.getTime() + msToMidnight);
+    return { jam: at.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' }), lagi: Math.max(1, Math.round(msToMidnight / 60e3)) };
+  };
+  const show = () => {
+    lastBusy = Date.now();
+    if (document.getElementById('busyBar') || sessionStorage.getItem('sl_busy_hide') === new Date().toDateString()) return;
+    const r = resetWIB();
+    const lagi = r.lagi >= 60 ? `±${Math.round(r.lagi / 60)} jam lagi` : `±${r.lagi} menit lagi`;
+    const el = document.createElement('div');
+    el.id = 'busyBar'; el.className = 'busy-bar'; el.setAttribute('role', 'status');
+    el.innerHTML = `<span class="busy-ico">⏳</span><div><b>Server sedang penuh — ini bukan error.</b>
+      <span>Kuota harian database gratis sedang habis, jadi sebagian data (materi, statistik, peringkat) belum bisa dimuat. Data kamu tetap aman. Normal kembali sekitar pukul <b>${r.jam} WIB</b> (${lagi}).</span></div>
+      <button aria-label="Tutup">✕</button>`;
+    document.body.appendChild(el);
+    el.querySelector('button').onclick = () => { el.remove(); try { sessionStorage.setItem('sl_busy_hide', new Date().toDateString()); } catch {} };
+  };
+  addEventListener('server:busy', show);
+  // sembunyikan otomatis bila server sudah normal lagi beberapa menit
+  addEventListener('server:ok', () => { if (Date.now() - lastBusy > 4 * 60e3) document.getElementById('busyBar')?.remove(); });
+})();

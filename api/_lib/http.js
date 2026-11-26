@@ -1,5 +1,11 @@
 // Helper HTTP yang kompatibel dengan Vercel Node Functions & dev-server lokal
+// Kuota harian Firestore (paket gratis) habis → tandai, lalu beri tahu browser lewat header X-Server-Busy
+export const isQuotaErr = e => !!e && (e.code === 8 || /RESOURCE_EXHAUSTED|Quota exceeded|quota/i.test(String(e.message || e.details || '')));
+export function markQuota() { globalThis.__slQuotaHit = Date.now(); }
+export const quotaBusy = () => Date.now() - (globalThis.__slQuotaHit || 0) < 3 * 60 * 1000;
+
 export function send(res, status, data) {
+  if (quotaBusy()) res.setHeader('X-Server-Busy', 'quota');
   res.statusCode = status;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Cache-Control', 'no-store');
@@ -56,6 +62,7 @@ export function handle(methods, fn) {
       await checkRevoked(req);
       await fn(req, res);
     } catch (e) {
+      if (isQuotaErr(e)) { markQuota(); return send(res, 503, { error: 'Server sedang penuh (kuota harian database habis). Ini bukan error — coba lagi setelah kuota reset.', serverBusy: true }); }
       if (!e.expose) console.error(e);
       send(res, e.status || 500, { error: e.expose ? e.message : 'Terjadi kesalahan server. Coba lagi.' });
     }
