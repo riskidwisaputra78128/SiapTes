@@ -115,7 +115,14 @@ function renderLobby(app) {
     } catch (e) { $('#roomList').innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
     return true;
   };
-  const loop = async () => { if (await load()) setTimeout(() => !document.hidden ? loop() : setTimeout(loop, 8000), 8000); };
+  // daftar room hanya diperbarui selama halaman tampil; tab disembunyikan → berhenti, kembali → langsung segar
+  let paused = false;
+  const loop = async () => { if (document.hidden) { paused = true; return; } if (await load()) setTimeout(loop, 8000); };
+  const onVis = () => {
+    if (!document.body.contains($('#roomList'))) return document.removeEventListener('visibilitychange', onVis);
+    if (!document.hidden && paused) { paused = false; loop(); }
+  };
+  document.addEventListener('visibilitychange', onVis);
   loop();
 }
 

@@ -1,5 +1,5 @@
 // Pemilihan soal bersama (dipakai /api/questions dan /api/duel)
-import { getDB } from './db.js';
+import { getDB, dataVersion } from './db.js';
 import { SEED_QUESTIONS } from './seed.js';
 
 export const DIFFS = ['easy', 'normal', 'hard', 'prof'];
@@ -23,9 +23,28 @@ export const qkey = id => String(id || '').slice(-8);
  * seen: daftar kunci pendek soal yang sudah pernah didapat pengguna (dari perangkatnya).
  * Soal yang belum pernah dilihat diutamakan; bila semua sudah pernah, diulang dari yang paling lama.
  */
+// Daftar soal hasil AI per kategori disimpan sementara di memori server & dipakai bersama semua peserta.
+// Tanpa ini, setiap sesi latihan membaca hingga 600 dokumen Firestore. Cache otomatis diganti bila
+// ada soal baru/dihapus (versi data berubah) atau sudah 10 menit.
+const Q_TTL = 10 * 60 * 1000;
+const qCache = globalThis.__qListCache || (globalThis.__qListCache = new Map());
+const qFlight = new Map();
+async function cachedQuestions(category) {
+  const db = await getDB();
+  const ver = (await dataVersion(db))?.q || 0;
+  const k = category || 'campuran', hit = qCache.get(k);
+  if (hit && hit.ver === ver && Date.now() - hit.at < Q_TTL) return hit.list;
+  const fk = k + '|' + ver;
+  if (!qFlight.has(fk)) qFlight.set(fk, db.listQuestions({ category: k })
+    .then(list => { qCache.set(k, { at: Date.now(), ver, list }); return list; })
+    .finally(() => qFlight.delete(fk)));
+  try { return await qFlight.get(fk); }
+  catch (e) { if (hit?.list) return hit.list; throw e; }   // Firestore gagal → pakai salinan lama bila ada
+}
+
 export async function pickQuestions({ category = 'campuran', difficulty = 'all', type = 'pg', limit = 10, fresh = false, seen = [] }) {
   let dbQs = [];
-  try { dbQs = await (await getDB()).listQuestions({ category, type }); } catch (e) { console.error('listQuestions', e.message); }
+  try { dbQs = await cachedQuestions(category); } catch (e) { console.error('listQuestions', e.message); }
   const uniq = new Set();
   const pool = [...dbQs, ...SEED_QUESTIONS]
     .filter(q => q.type === type && (category === 'campuran' || q.category === category))

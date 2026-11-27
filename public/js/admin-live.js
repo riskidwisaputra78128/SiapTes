@@ -978,6 +978,19 @@ export async function renderAdminLive(app) {
   }
   $('#ccLoading').remove();
   renderFeed(); selectRoom('overview', false); frame();
-  const loop = async () => { if (await load()) setTimeout(loop, 5000); };
+  // Hemat kuota: data hanya diambil selama halaman Kantor tampil di layar.
+  // Pindah tab/aplikasi, browser di-minimize, atau layar HP mati → berhenti total; kembali → langsung diperbarui.
+  let pollT = null, waiting = false;
+  const loop = async () => {
+    pollT = null;
+    if (!document.body.contains(stage)) return;
+    if (document.hidden) { waiting = true; return; }
+    if (await load()) pollT = setTimeout(loop, 5000);
+  };
+  const onVis = () => {
+    if (!document.body.contains(stage)) return document.removeEventListener('visibilitychange', onVis);
+    if (!document.hidden && waiting) { waiting = false; clearTimeout(pollT); loop(); }
+  };
+  document.addEventListener('visibilitychange', onVis);
   loop();
 }

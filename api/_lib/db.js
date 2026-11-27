@@ -1,9 +1,39 @@
 // Lapisan database: Firestore (production) atau memori (dev lokal tanpa Firebase)
+import { bumpBoards } from './board.js';
 let backendPromise;
 
 export function getDB() {
-  if (!backendPromise) backendPromise = init();
+  if (!backendPromise) backendPromise = init().then(withVersions);
   return backendPromise;
+}
+
+// Versi data: setiap soal/materi ditambah, diubah, atau dihapus → meta 'ver' diperbarui.
+// Cache di server (daftar soal, materi) membandingkan versi ini agar langsung segar setelah admin generate/hapus.
+const VER_FIELDS = { addQuestions: 'q', deleteQuestions: 'q', addMaterials: 'm', updateMaterial: 'm', deleteMaterial: 'm', pruneMaterials: 'm' };
+function withVersions(be) {
+  for (const [k, f] of Object.entries(VER_FIELDS)) {
+    const fn = be[k];
+    if (typeof fn !== 'function') continue;
+    be[k] = async (...a) => {
+      const r = await fn.apply(be, a);
+      if (!(k === 'pruneMaterials' && !r)) { const t = Date.now(); await be.setMetaField('ver', f, t).catch(() => {}); verCache.v = { ...verCache.v, [f]: t }; }
+      return r;
+    };
+  }
+  // latihan selesai → ringkasan papan peringkat ikut diperbarui
+  const add = be.addAttempt;
+  be.addAttempt = async a => { const id = await add.call(be, a); await bumpBoards(be, a); return id; };
+  return be;
+}
+const verCache = globalThis.__verCache || (globalThis.__verCache = { at: 0, v: {}, p: null });
+const VER_TTL = 30000;
+/** Versi data terbaru {q, m} — dibaca dari Firestore paling sering 1× per 30 detik per server. */
+export async function dataVersion(db) {
+  if (Date.now() - verCache.at < VER_TTL) return verCache.v;
+  if (!verCache.p) verCache.p = db.getMeta('ver').catch(() => null)
+    .then(v => { Object.assign(verCache, { at: Date.now(), v: v || {} }); return verCache.v; })
+    .finally(() => { verCache.p = null; });
+  return verCache.p;
 }
 
 export function firebaseEnabled() {
@@ -164,6 +194,10 @@ function firestoreBackend(fs) {
     async setAvatar(id, data) { await fs.collection('avatars').doc(id).set(data); },
     async deleteAvatar(id) { await fs.collection('avatars').doc(id).delete().catch(() => {}); },
     async setMetaField(key, field, val) { await M.doc(key).set({ [field]: val === null ? FieldValue.delete() : val }, { merge: true }); },
+    async bumpBoard(key, field, info, delta) {
+      const inc = {}; for (const [k, v] of Object.entries(delta)) inc[k] = FieldValue.increment(v);
+      await M.doc(key).set({ [field]: { ...info, ...inc } }, { merge: true });
+    },
     // Akun dev tidak dipakai di Firestore (akun disimpan di Google Sheet via Apps Script)
   };
 }
@@ -208,6 +242,11 @@ function memoryBackend() {
     async setAvatar(id, data) { (g.av ||= new Map()).set(id, data); },
     async deleteAvatar(id) { (g.av ||= new Map()).delete(id); },
     async setMetaField(key, field, val) { const o = { ...(g.m.get(key) || {}) }; if (val === null) delete o[field]; else o[field] = val; g.m.set(key, o); },
+    async bumpBoard(key, field, info, delta) {
+      const o = { ...(g.m.get(key) || {}) }; const cur = { ...(o[field] || {}), ...info };
+      for (const [k, v] of Object.entries(delta)) cur[k] = (cur[k] || 0) + v;
+      o[field] = cur; g.m.set(key, o);
+    },
     users: g.users,
   };
 }

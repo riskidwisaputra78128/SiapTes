@@ -2,15 +2,16 @@
 //   { action: 'login'|'register', name?, email, password, target? }
 //   { action: 'forgot', email }                    → kirim kode reset ke email
 //   { action: 'reset', email, code, password }     → ganti kata sandi & langsung masuk
-//   ADMIN (token admin): { action: 'admin-list' } · { action: 'admin-delete', email } · { action: 'admin-password', email, password }
+//   ADMIN (token admin): { action: 'admin-list' } · { action: 'admin-delete', email } · { action: 'admin-password', email, password } · { action: 'admin-kantor', uid, email, on }
 // Akun disimpan & divalidasi oleh Google Apps Script + Google Sheet (env GAS_URL + GAS_API_KEY).
 // Vercel lalu menerbitkan token bertanda tangan (HMAC) untuk akses API lain.
 import crypto from 'node:crypto';
 import { handle, readBody, send, httpError } from './_lib/http.js';
-import { signToken, isAdmin, devHash, requireUser, revokeSessions } from './_lib/auth.js';
+import { signToken, isAdmin, devHash, requireUser, revokeSessions, kantorMap, setKantorAccess, uidKey, canKantor } from './_lib/auth.js';
 import { pidOf } from './_lib/avatar.js';
 import { avatarMap, avatarUrl } from './_lib/avatar.js';
 import { getDB } from './_lib/db.js';
+import { dropFromBoards } from './_lib/board.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const ACTIONS = ['login', 'register', 'forgot', 'reset'];
@@ -47,11 +48,18 @@ async function adminAction(req, res, b) {
   if (b.action === 'admin-list') {
     const r = await accountStore({ action: 'adminList' });
     if (!r?.ok) throw httpError(502, r?.error || 'Gagal mengambil daftar akun. Pastikan Code.gs Apps Script sudah diperbarui & di-deploy ulang.');
-    const [avs, online] = await Promise.all([avatarMap(db).catch(() => ({})), db.listPresence(Date.now() - 150000).catch(() => [])]);
+    const [avs, online, km] = await Promise.all([avatarMap(db).catch(() => ({})), db.listPresence(Date.now() - 150000).catch(() => []), kantorMap(db, true).catch(() => ({}))]);
     const on = new Set(online.map(p => p.uid));
-    const users = r.users.map(u => ({ ...u, admin: isAdmin(u), me: u.email === String(admin.email).toLowerCase(), avatar: avatarUrl(u.uid, avs), online: on.has(u.uid) }))
+    const users = r.users.map(u => ({ ...u, admin: isAdmin(u), me: u.email === String(admin.email).toLowerCase(), avatar: avatarUrl(u.uid, avs), online: on.has(u.uid), kantor: isAdmin(u) || !!km[uidKey(u.uid)] }))
       .sort((a, b) => (b.lastLogin || b.createdAt || 0) - (a.lastLogin || a.createdAt || 0));
     return send(res, 200, { users, total: users.length });
+  }
+  if (b.action === 'admin-kantor') {
+    const uid = String(b.uid || '').trim();
+    if (!uid || uid.length > 200) throw httpError(400, 'Akun tidak valid');
+    if (isAdmin({ email: b.email })) throw httpError(400, 'Admin selalu punya akses Kantor');
+    await setKantorAccess(db, uid, !!b.on);
+    return send(res, 200, { ok: true, kantor: !!b.on });
   }
   const email = String(b.email || '').trim().toLowerCase();
   if (!EMAIL_RE.test(email)) throw httpError(400, 'Email akun tidak valid');
@@ -67,6 +75,8 @@ async function adminAction(req, res, b) {
       revokeSessions(db, uid),
       db.deletePresence(uid).catch(() => {}),
       db.deleteAvatar(pidOf(uid)).catch(() => {}),
+      setKantorAccess(db, uid, false).catch(() => {}),
+      dropFromBoards(db, uid).catch(() => {}),
     ]);
     return send(res, 200, { ok: true, deleted: r.user, attempts });
   }
@@ -147,6 +157,7 @@ export default handle(['POST'], async (req, res) => {
     });
   }
   const user = result.user;
-  const avatar = avatarUrl(user.uid, await avatarMap(await getDB()).catch(() => ({})));
-  send(res, 200, { token: signToken(user), user: { ...user, admin: isAdmin(user), avatar } });
+  const db = await getDB();
+  const [avs, kantor] = await Promise.all([avatarMap(db).catch(() => ({})), canKantor(db, user).catch(() => isAdmin(user))]);
+  send(res, 200, { token: signToken(user), user: { ...user, admin: isAdmin(user), avatar: avatarUrl(user.uid, avs), kantor } });
 });

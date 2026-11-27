@@ -1,6 +1,6 @@
 // GET /api/news — berita terkini + jumlah bank soal (publik) + status sistem
 import { handle, send, startOfDayWIB } from './_lib/http.js';
-import { getDB, firebaseEnabled } from './_lib/db.js';
+import { getDB, firebaseEnabled, dataVersion } from './_lib/db.js';
 import { aiEnabled, aiModelsInfo } from './_lib/ai.js';
 import { fetchHeadlines, backupAll, CAT_KEYWORDS } from './_lib/news.js';
 import { imageForNews } from './_lib/ogimage.js';
@@ -9,6 +9,16 @@ import { SEED_QUESTIONS } from './_lib/seed.js';
 const CACHE_MS = 3 * 3600 * 1000;
 const CATS = ['twk', 'tiu', 'tkp', 'ojk', 'bi', 'bumn', 'telkom', 'keuangan', 'english', 'isu', 'psikologi'];
 
+// hitungan bank soal & materi hari ini dipakai bersama (memori server), diganti bila data berubah / 2 menit
+const SHARE_TTL = 2 * 60 * 1000;
+const shared = globalThis.__newsShared || (globalThis.__newsShared = { bank: null, mats: null });
+async function sharedGet(slot, ver, fn) {
+  const c = shared[slot];
+  if (c && c.ver === ver && Date.now() - c.at < SHARE_TTL && c.day === startOfDayWIB(Date.now())) return c.v;
+  const v = await fn();
+  shared[slot] = { at: Date.now(), ver, v, day: startOfDayWIB(Date.now()) };
+  return v;
+}
 async function questionBank(db) {
   const seedBy = {};
   for (const q of SEED_QUESTIONS) seedBy[q.category] = (seedBy[q.category] || 0) + 1;
@@ -55,7 +65,8 @@ export default handle(['GET'], async (req, res) => {
     }));
     if (items.length) { news = { at: Date.now(), items }; db.setMeta('news3', news).catch(() => {}); }
   }
-  const [last, bank, settings, mats] = await Promise.all([db.getMeta('lastGenerate').catch(() => null), questionBank(db), db.getMeta('settings').catch(() => null), db.listMaterialsSince(startOfDayWIB(Date.now()), 10).catch(() => [])]);   // hemat kuota: hanya materi hari ini (maks 10 dokumen)
+  const ver = await dataVersion(db);
+  const [last, bank, settings, mats] = await Promise.all([db.getMeta('lastGenerate').catch(() => null), sharedGet('bank', ver.q || 0, () => questionBank(db)), db.getMeta('settings').catch(() => null), sharedGet('mats', ver.m || 0, () => db.listMaterialsSince(startOfDayWIB(Date.now()), 10).catch(() => []))]);   // hemat kuota: hanya materi hari ini (maks 10 dokumen)
   // ringkasan update hari ini (untuk pop-up harian setelah login)
   const sod = startOfDayWIB(Date.now());
   const newMats = mats.filter(m => m.title && m.createdAt >= sod);

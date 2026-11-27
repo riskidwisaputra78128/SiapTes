@@ -1,5 +1,5 @@
 import { FX_LEVELS, fxChoice, setFx, autoFx } from './perf.js';
-import { api, session, getInfo } from './api.js';
+import { api, session, getInfo, cachedApi } from './api.js';
 import { $, $$, esc, toast, bindTilt, icons, fmt, timeAgo, countUp, avatar, sheet } from './ui.js';
 import { CATEGORIES, TARGETS, catByKey } from './data.js';
 import { initBackground } from './three-bg.js';
@@ -34,13 +34,17 @@ const NAV = [
   { href: '#/profil', key: 'profil', label: 'Profil', ico: icons.user },
 ];
 
+// Kantor Live: khusus admin & pengguna yang diberi akses admin
+export const canKantor = () => !!(session.user?.admin || session.user?.kantor);
+
 function chrome(show, active) {
   $('#topbar').hidden = !show;
   $('#bottomnav').hidden = !show;
   if (!show) return;
-  const links = NAV.filter(n => !n.desktopOnly).map(n => `<a href="${n.href}" class="${n.key === active ? 'on' : ''}">${n.ico}<span>${n.label}</span></a>`).join('');
+  const nav = NAV.filter(n => n.key !== 'kantor' || canKantor());
+  const links = nav.filter(n => !n.desktopOnly).map(n => `<a href="${n.href}" class="${n.key === active ? 'on' : ''}">${n.ico}<span>${n.label}</span></a>`).join('');
   $('#bottomnav').innerHTML = links;
-  $('#topnav').innerHTML = NAV.map(n => `<a href="${n.href}" class="${n.key === active ? 'on' : ''}">${n.label}</a>`).join('');
+  $('#topnav').innerHTML = nav.map(n => `<a href="${n.href}" class="${n.key === active ? 'on' : ''}">${n.label}</a>`).join('');
   const u = session.user;
   paintAvatarBtn();
 }
@@ -83,7 +87,9 @@ async function route() {
       case 'materi': await renderMateri(app, params); break;
       case 'duel': await renderDuel(app, params); break;
       case 'psikotes': renderPsikotes(app, params); break;
-      case 'command': case 'kantor': await renderAdminLive(app); break;
+      case 'command': case 'kantor':
+        if (!canKantor()) { app.innerHTML = `<div class="glass card empty fade-in"><p style="font-size:34px;margin:0">🏢🔒</p><p><b>Kantor Live khusus admin</b></p><p class="dim">Minta admin untuk memberi akses Kantor ke akunmu.</p><a class="btn sm" href="#/">Kembali ke beranda</a></div>`; break; }
+        await renderAdminLive(app); break;
       default: await renderHome();
     }
   } catch (e) {
@@ -364,8 +370,8 @@ async function renderHome() {
     </div>
   </section>
 
-  <section class="section"><a class="glass card row tilt office-card" href="#/kantor" style="gap:14px"><span style="font-size:34px">🏢</span>
-    <div style="flex:1"><b>Kantor Live SiapLolos</b><div class="dim">Lihat kantor 3D: siapa yang sedang latihan, duel, membaca, atau rehat ngopi</div></div><span class="grad-text" style="font-weight:800">Masuk →</span></a></section>
+  ${canKantor() ? `<section class="section"><a class="glass card row tilt office-card" href="#/kantor" style="gap:14px"><span style="font-size:34px">🏢</span>
+    <div style="flex:1"><b>Kantor Live SiapLolos</b><div class="dim">Lihat kantor 3D: siapa yang sedang latihan, duel, membaca, atau rehat ngopi</div></div><span class="grad-text" style="font-weight:800">Masuk →</span></a></section>` : ''}
 
   <section class="section"><a class="glass card row tilt" href="#/teknologi" style="gap:14px"><span style="font-size:30px">⚙️</span>
     <div style="flex:1"><b>Teknologi di balik SiapLolos</b><div class="dim">Vercel, GitHub, Firebase, Apps Script, Gemini, dan lainnya</div></div><span class="grad-text" style="font-weight:800">→</span></a></section>`;
@@ -398,7 +404,7 @@ async function renderHome() {
       : `<div class="empty">Berita belum tersedia. Soal isu terkini dibuat otomatis setiap pagi.</div>`;
   }).catch(() => { const el = $('#newsList'); if (el) el.innerHTML = '<div class="empty">Gagal memuat berita.</div>'; });
 
-  api('/leaderboard?period=week').then(d => {
+  cachedApi('/leaderboard?period=week', 30000).then(d => {
     const el = $('#lbMini'); if (!el) return;
     el.innerHTML = d.top.length ? d.top.slice(0, 5).map(r => `
       <div class="lb-row ${r.me ? 'me' : ''}"><span class="rank ${r.rank <= 3 ? 'r' + r.rank : ''}">${r.rank}</span>${avatar(r, 'md')}
@@ -407,7 +413,7 @@ async function renderHome() {
   }).catch(() => {});
 
   if (session.loggedIn) {
-    api('/stats').then(s => {
+    cachedApi('/stats', 60000).then(s => {
       const lc = $('#levelCard'); if (!lc) return;
       lc.innerHTML = `
         <div class="row between"><div class="streak"><span class="flame">🔥</span><div><div style="font-family:var(--num);font-size:28px;font-weight:700;line-height:1">${s.streak}</div><div class="dim">hari beruntun</div></div></div>
@@ -575,7 +581,7 @@ function renderProfile() {
     <div class="glass card">
       <h2 class="h2">⚙️ Panel Admin</h2>
       <a class="glass card row tilt" href="#/command" style="gap:14px;margin:12px 0"><span style="font-size:30px">🏢</span>
-        <div style="flex:1"><b>Kantor Live / Command Center</b><div class="dim">Kini bisa dibuka semua pengguna lewat menu 🏢 Kantor</div></div><span class="grad-text" style="font-weight:800">Buka →</span></a>
+        <div style="flex:1"><b>Kantor Live / Command Center</b><div class="dim">Khusus admin — beri akses ke pengguna tertentu lewat Kelola akun di bawah</div></div><span class="grad-text" style="font-weight:800">Buka →</span></a>
       <p class="muted" style="margin:6px 0 12px">Buat soal & materi baru dari berita hari ini (Gemini). Keduanya juga berjalan otomatis setiap hari pukul 06.00 WIB.</p>
       <div id="sysStatus" class="dim">Memuat status…</div>
       <div class="gen-pick">
@@ -598,7 +604,7 @@ function renderProfile() {
     </div>
     <div class="glass card" id="accCard">
       <div class="row between wrap" style="gap:10px"><h2 class="h2" style="margin:0">👥 Kelola akun</h2><span class="chip" id="accTotal">…</span></div>
-      <p class="muted" style="margin:6px 0 10px">Daftar semua akun terdaftar. Admin bisa mengganti kata sandi akun mana pun tanpa kode email, atau menghapus akun beserta riwayat latihan & peringkatnya.</p>
+      <p class="muted" style="margin:6px 0 10px">Daftar semua akun terdaftar. Admin bisa mengganti kata sandi akun mana pun tanpa kode email, menghapus akun beserta riwayat latihan & peringkatnya, atau memberi/mencabut akses 🏢 Kantor Live.</p>
       <div class="row" style="gap:8px"><input class="input" id="accQ" placeholder="Cari nama atau email…" style="flex:1"><button class="btn ghost sm" id="accReload" title="Muat ulang">↻</button></div>
       <div id="accList" class="acc-list"><div class="skeleton" style="height:120px"></div></div>
     </div>
@@ -640,7 +646,7 @@ function renderProfile() {
     <label class="glass card row" style="gap:14px;cursor:pointer"><span style="font-size:26px">🟢</span>
       <div style="flex:1"><b>Tampilkan saya di daftar online</b><div class="dim">Matikan jika ingin belajar tanpa terlihat orang lain</div></div>
       <input type="checkbox" id="onlineToggle" class="switch" ${isHidden() ? '' : 'checked'}></label>
-    <a class="btn ghost block" href="#/kantor">🏢 Kantor Live</a>
+    ${canKantor() ? '<a class="btn ghost block" href="#/kantor">🏢 Kantor Live</a>' : ''}
     <a class="btn ghost block" href="#/peringkat">🏆 Papan peringkat</a>
     <a class="btn ghost block" href="#/teknologi">⚙️ Teknologi di balik SiapLolos</a>
     <button class="btn ghost block" id="logoutBtn">Keluar</button>
@@ -657,7 +663,7 @@ function renderProfile() {
     await Promise.race([api('/duel', { method: 'POST', body: { action: 'leaveAll' } }).catch(() => {}), new Promise(r => setTimeout(r, 2500))]);   // keluar dari room duel yang masih diikuti
     session.clear(); toast('Kamu telah keluar'); location.hash = '#/login';
   };
-  api('/stats').then(s => {
+  cachedApi('/stats', 60000).then(s => {
     const v = [s.summary.allTime.questions, s.summary.allTime.accuracy, s.summary.allTime.points];
     $$('#profStats .v').forEach((el, i) => (el.textContent = i === 1 ? v[i] + '%' : fmt(v[i])));
   }).catch(() => {});
@@ -703,11 +709,22 @@ function renderProfile() {
             <span class="dim">${esc(u.email)}${u.target ? ' · 🎯 ' + esc(u.target) : ''}</span>
             <span class="dim acc-meta">Daftar ${fmtD(u.createdAt)} · Login terakhir ${fmtD(u.lastLogin)} · ${u.loginCount || 0}× login</span></div>
           <div class="acc-act"><button class="btn ghost sm" data-pw="${esc(u.email)}">🔑 Ganti sandi</button>
+            ${u.admin ? '' : `<button class="btn ghost sm acc-kan${u.kantor ? ' on' : ''}" data-kan="${esc(u.email)}" title="${u.kantor ? 'Cabut akses Kantor Live' : 'Beri akses Kantor Live'}">🏢 ${u.kantor ? 'Cabut Kantor' : 'Beri Kantor'}</button>`}
             ${u.me || u.admin ? '' : `<button class="btn ghost sm acc-del" data-del="${esc(u.email)}">🗑️ Hapus</button>`}</div>
         </div>`).join('') : `<div class="empty">${q ? 'Tidak ada akun yang cocok.' : 'Belum ada akun.'}</div>`;
       $$('#accList [data-pw]').forEach(b => (b.onclick = () => accPassword(accAll.find(u => u.email === b.dataset.pw))));
       $$('#accList [data-del]').forEach(b => (b.onclick = () => accDelete(accAll.find(u => u.email === b.dataset.del))));
+      $$('#accList [data-kan]').forEach(b => (b.onclick = () => accKantor(accAll.find(u => u.email === b.dataset.kan), b)));
     };
+    async function accKantor(u, b) {
+      if (!u) return;
+      b.disabled = true;
+      try {
+        const r = await api('/auth', { method: 'POST', body: { action: 'admin-kantor', uid: u.uid, email: u.email, on: !u.kantor } });
+        u.kantor = r.kantor; paintAcc();
+        toast(r.kantor ? `🏢 ${u.name} kini bisa membuka Kantor Live` : `Akses Kantor ${u.name} dicabut`, 'ok');
+      } catch (e) { toast(e.message, 'err'); b.disabled = false; }
+    }
     const loadAcc = async () => {
       $('#accList').innerHTML = '<div class="skeleton" style="height:120px"></div>';
       try { accAll = (await api('/auth', { method: 'POST', body: { action: 'admin-list' } })).users; paintAcc(); }
@@ -853,6 +870,12 @@ function renderProfile() {
 }
 
 window.addEventListener('hashchange', route);
+// akses Kantor berubah (diberi/dicabut admin) → perbarui menu tanpa memuat ulang
+window.addEventListener('kantor:change', () => {
+  const path = location.hash.replace(/^#\/?/, '').split('?')[0];
+  if (!$('#topbar').hidden) chrome(true, path);
+  if ((path === 'kantor' || path === 'command') && !canKantor()) route();
+});
 window.addEventListener('auth:expired', () => { toast('Sesi berakhir, silakan masuk lagi', 'err'); location.hash = '#/login'; });
 window.addEventListener('beforeunload', e => { if (practice.active) { e.preventDefault(); e.returnValue = ''; } });
 

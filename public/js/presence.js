@@ -21,6 +21,7 @@ async function beat(force = false) {
   try {
     const d = await api('/presence', { method: 'POST', body: { page: pageNow(), duel: presence.duelCode, since, hidden: isHidden() } });
     Object.assign(presence, { count: d.count, users: d.users, ready: true });
+    if (typeof d.kantor === 'boolean' && !!session.user?.kantor !== d.kantor) { session.patch({ kantor: d.kantor }); window.dispatchEvent(new Event('kantor:change')); }
     window.dispatchEvent(new Event('presence:update'));
   } catch {}
 }
@@ -61,7 +62,7 @@ export function onlineWidget(el) {
         ${avatarStack(users)}
         <span class="grad-text" style="margin-left:auto;font-weight:800">Lihat →</span>
       </button>
-      <a class="btn ghost sm block" href="#/kantor" style="margin-top:8px">🏢 Lihat di Kantor Live 3D</a>`;
+      ${session.user?.admin || session.user?.kantor ? '<a class="btn ghost sm block" href="#/kantor" style="margin-top:8px">🏢 Lihat di Kantor Live 3D</a>' : ''}`;
     $('#onlineOpen', el)?.addEventListener('click', openOnlineList);
   };
   draw();

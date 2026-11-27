@@ -21,17 +21,31 @@ const settingsRoute = handle(['POST'], async (req, res) => {
   await db.setMeta('settings', next);
   send(res, 200, { ok: true, ...patch });
 });
-import { getUser, requireUser, isAdmin } from './_lib/auth.js';
+import { getUser, requireUser, isAdmin, canKantor } from './_lib/auth.js';
 import { getDB } from './_lib/db.js';
 import { avatarMap, avatarUrl } from './_lib/avatar.js';
 
 const ONLINE_MS = 2.5 * 60 * 1000;
 const PAGES = ['beranda', 'latihan', 'quiz', 'hasil', 'materi', 'duel', 'evaluasi', 'peringkat', 'profil', 'teknologi', 'kantor'];
 
+// Daftar online di-cache sebentar & dipakai bersama semua pengguna (hemat kuota baca Firestore).
+// Data milik pengguna sendiri selalu ditimpa dengan versi terbaru agar langsung tampil.
+const PRES_TTL = 15000;
+const presCache = globalThis.__presCache || (globalThis.__presCache = { at: 0, list: [], p: null });
+async function presenceAll(db, now) {
+  if (now - presCache.at < PRES_TTL) return presCache.list;
+  if (!presCache.p) presCache.p = db.listPresence(now - ONLINE_MS).then(l => { Object.assign(presCache, { at: Date.now(), list: l }); return l; }).finally(() => { presCache.p = null; });
+  return presCache.p;
+}
+function presUpsert(uid, rec) {
+  presCache.list = presCache.list.filter(p => p.uid !== uid);
+  if (rec) presCache.list.push({ uid, ...rec });
+}
+
 async function onlineList(db, meUid) {
   const now = Date.now();
-  const [all, avs] = await Promise.all([db.listPresence(now - ONLINE_MS), avatarMap(db)]);
-  const list = all.filter(p => !p.hidden);
+  const [all, avs] = await Promise.all([presenceAll(db, now), avatarMap(db)]);
+  const list = all.filter(p => !p.hidden && now - (p.lastSeen || 0) < ONLINE_MS);
   return list
     .sort((a, b) => (b.uid === meUid) - (a.uid === meUid) || b.lastSeen - a.lastSeen)
     .map(p => ({
@@ -50,18 +64,20 @@ const presenceRoute = handle(['GET', 'POST'], async (req, res) => {
   const user = requireUser(req);
   const b = await readBody(req);
   const now = Date.now();
-  if (b.hidden) await db.deletePresence(user.uid);
+  if (b.hidden) { await db.deletePresence(user.uid); presUpsert(user.uid, null); }
   else {
     const duel = b.duel && /^[A-Z0-9]{6}$/.test(b.duel) ? b.duel : null;
-    await db.setPresence(user.uid, {
+    const rec = {
       name: String(user.name || 'Peserta').split(' ').slice(0, 2).join(' ').slice(0, 24),
       target: String(user.target || '').slice(0, 30),
       page: PAGES.includes(b.page) ? b.page : 'beranda',
       duel, lastSeen: now, since: Number(b.since) > now - 12 * 3600e3 && Number(b.since) <= now ? Number(b.since) : now, hidden: false,
-    });
+    };
+    await db.setPresence(user.uid, rec);
+    presUpsert(user.uid, rec);
   }
-  const list = await onlineList(db, user.uid);
-  send(res, 200, { count: list.length, users: list, hidden: !!b.hidden });
+  const [list, kantor] = await Promise.all([onlineList(db, user.uid), canKantor(db, user).catch(() => isAdmin(user))]);
+  send(res, 200, { count: list.length, users: list, hidden: !!b.hidden, kantor });
 });
 
 // Foto profil ikut di endpoint ini agar total function tetap 12 (batas paket Hobby)

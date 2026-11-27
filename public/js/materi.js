@@ -18,9 +18,23 @@ function dayLabel(day) {
   return new Date(day + 'T00:00:00+07:00').toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long' });
 }
 
+// isi materi yang sudah pernah dibuka disimpan di perangkat (12 jam) → dibuka lagi tanpa minta ke server
+const MAT_KEY = 'sl_mat:', MAT_TTL = 12 * 3600e3;
+async function materialById(id) {
+  try { const o = JSON.parse(localStorage.getItem(MAT_KEY + id) || 'null'); if (o && Date.now() - o.at < MAT_TTL && o.d?.material) return o.d; } catch {}
+  const d = await api('/materials?id=' + encodeURIComponent(id));
+  try {
+    localStorage.setItem(MAT_KEY + id, JSON.stringify({ at: Date.now(), d }));
+    const keys = Object.keys(localStorage).filter(k => k.startsWith(MAT_KEY));
+    if (keys.length > 40) keys.map(k => [k, JSON.parse(localStorage.getItem(k) || '{}').at || 0]).sort((a, b) => a[1] - b[1]).slice(0, keys.length - 40).forEach(([k]) => localStorage.removeItem(k));
+  } catch {}
+  return d;
+}
+const dropMat = id => { try { localStorage.removeItem(MAT_KEY + id); } catch {} };
+
 let listCache = null;
 export async function getMaterials(force = false) {
-  if (!listCache || force || Date.now() - listCache.at > 20000) listCache = { at: Date.now(), p: api('/materials' + (force ? '?t=' + Date.now() : '')).catch(e => { listCache = null; throw e; }) };
+  if (!listCache || force || Date.now() - listCache.at > 60000) listCache = { at: Date.now(), p: api('/materials' + (force ? '?t=' + Date.now() : '')).catch(e => { listCache = null; throw e; }) };
   return listCache.p;
 }
 
@@ -102,7 +116,7 @@ function askDelete(m, onDone) {
     $('#dNo', el).onclick = close;
     $('#dYes', el).onclick = async () => {
       const b = $('#dYes', el); b.disabled = true; b.innerHTML = '<span class="spinner"></span> Menghapus…';
-      try { await api('/materials?id=' + encodeURIComponent(m.id), { method: 'DELETE' }); listCache = null; close(); toast('Materi dihapus', 'ok'); onDone?.(); }
+      try { await api('/materials?id=' + encodeURIComponent(m.id), { method: 'DELETE' }); listCache = null; dropMat(m.id); close(); toast('Materi dihapus', 'ok'); onDone?.(); }
       catch (e) { toast(e.message, 'err'); b.disabled = false; b.textContent = 'Hapus permanen'; }
     };
   });
@@ -201,7 +215,7 @@ export async function renderMateri(app, params) {
 
 async function renderDetail(app, id) {
   app.innerHTML = '<div class="skeleton" style="height:420px"></div>';
-  const { material: m } = await api('/materials?id=' + encodeURIComponent(id));
+  const { material: m } = await materialById(id);
   const c = catByKey[m.category] || {};
   const read = readSet().has(m.id);
   const imgs = (m.images || []).filter(x => x.url !== m.cover);

@@ -93,11 +93,14 @@ async function callModel(model, prompt, timeoutMs) {
  * Panggil Gemini & kembalikan JSON.
  * deadline: batas waktu absolut (ms epoch) agar tidak melewati batas durasi fungsi Vercel.
  */
-export async function geminiJSON(prompt, { deadline = Date.now() + 45000 } = {}) {
+export async function geminiJSON(prompt, { deadline = Date.now() + 45000, prefer } = {}) {
   const all = await resolveModels();
   // giliran bergantian: permintaan paralel tersebar ke model berbeda (hemat batas per menit)
   const start = rr++ % all.length;
-  const order = [...all.slice(start), ...all.slice(0, start)];
+  let order = [...all.slice(start), ...all.slice(0, start)];
+  // prefer 'lite': tugas ringan (Mentor AI) memakai model ringan dulu (kuotanya paling longgar),
+  // model lain hanya cadangan bila model ringan sedang kena batas
+  if (prefer === 'lite') { const lite = all.filter(m => /lite/i.test(m)); order = [...lite, ...order.filter(m => !lite.includes(m))]; }
   const ready = order.filter(m => (cool.get(m) || 0) < Date.now());
   const list = ready.length ? ready : order;
   let lastErr, sawDaily = false, sawMinute = false;

@@ -1,4 +1,4 @@
-import { api, session } from './api.js';
+import { api, session, cachedApi } from './api.js';
 import { $, $$, esc, fmt, countUp, timeAgo, avatar } from './ui.js';
 import { catByKey, modeByKey, diffByKey } from './data.js';
 
@@ -24,7 +24,7 @@ const accColor = a => (a >= 80 ? 'linear-gradient(90deg,#34d399,#22d3ee)' : a >=
 export async function renderStats(app) {
   if (!session.loggedIn) return guestBlock(app, 'Evaluasi belajar');
   app.innerHTML = `<div class="skeleton" style="height:120px"></div><div class="skeleton" style="height:260px;margin-top:14px"></div>`;
-  const s = await api('/stats');
+  const s = await cachedApi('/stats', 60000);
   let period = 'daily';
   const sumTile = (label, o, ico) => `
     <div class="glass card tilt">
@@ -130,7 +130,7 @@ export async function renderLeaderboard(app) {
   </section>`;
   const load = async () => {
     const box = $('#lbBox'); box.innerHTML = '<div class="skeleton" style="height:260px"></div>';
-    const d = await api('/leaderboard?period=' + period);
+    const d = await cachedApi('/leaderboard?period=' + period, 30000);
     if (!d.top.length) { box.innerHTML = '<div class="empty"><div style="font-size:44px">🏆</div>Belum ada peserta di periode ini. Jadilah yang pertama!</div>'; return; }
     const t = d.top;
     const pod = (r, cls) => r ? `<div class="p ${cls}">${avatar(r, 'pod')}<div class="nm">${esc(r.name)}</div><div class="block">${cls === 'p1' ? '👑' : cls === 'p2' ? '🥈' : '🥉'}<br>${fmt(r.points)}</div></div>` : '<div></div>';

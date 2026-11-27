@@ -1328,6 +1328,7 @@ body:has(.start-bar) .dock { bottom: calc(96px + var(--safe-b)); }
 .acc-meta { font-size: 11.5px !important; }
 .acc-act { display: flex; gap: 6px; flex: none; }
 .acc-del { color: var(--red) !important; }
+.acc-kan.on { color: var(--cyan) !important; border-color: color-mix(in srgb, var(--cyan) 45%, transparent) !important; }
 .chip.sm { font-size: 10.5px; padding: 1px 7px; }
 .acc-adm { background: rgba(250,204,21,.15); color: #facc15; }
 .acc-on { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 3px rgba(52,211,153,.2); }

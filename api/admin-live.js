@@ -1,7 +1,7 @@
-// GET /api/admin-live — data Kantor Live (semua pengguna login)
+// GET /api/admin-live — data Kantor Live (khusus admin + pengguna yang diberi akses admin)
 import crypto from 'node:crypto';
 import { handle, send, httpError, startOfDayWIB, dayKey } from './_lib/http.js';
-import { requireUser, isAdmin } from './_lib/auth.js';
+import { requireUser, isAdmin, canKantor } from './_lib/auth.js';
 import { getDB, firebaseEnabled } from './_lib/db.js';
 import { aiEnabled } from './_lib/ai.js';
 import { SEED_QUESTIONS } from './_lib/seed.js';
@@ -12,6 +12,7 @@ const key = uid => crypto.createHash('sha1').update(String(uid)).digest('hex').s
 export default handle(['GET'], async (req, res) => {
   const me = requireUser(req);
   const db = await getDB();
+  if (!(await canKantor(db, me))) throw httpError(403, 'Kantor Live khusus admin. Minta admin untuk memberi akses.');
   const now = Date.now(), day0 = startOfDayWIB(now);
 
   const [presence, rooms, attempts, genStatus, lastGenerate, materials, generated] = await Promise.all([

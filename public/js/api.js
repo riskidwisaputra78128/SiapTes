@@ -39,5 +39,25 @@ export async function api(path, { method = 'GET', body } = {}) {
     window.dispatchEvent(new Event('auth:expired'));
   }
   if (!r.ok) throw Object.assign(new Error(data.error || `Gagal memuat (${r.status})`), { status: r.status });
+  if (method !== 'GET' && /^\/(attempt|duel|auth)/.test(path)) dropCache();   // ada hasil latihan/duel baru → statistik & peringkat dimuat ulang
   return data;
+}
+
+// Cache ringan di browser (memori + sessionStorage) untuk data milik pengguna yang sering dibuka ulang
+// (statistik, peringkat). Otomatis dibuang saat ada latihan/duel baru.
+const memo = new Map();
+const CK = 'sl_c:';
+export function cachedApi(path, ttl = 60000) {
+  const k = (session.user?.uid || 'anon') + '|' + path;
+  let c = memo.get(k);
+  if (!c) { try { const o = JSON.parse(sessionStorage.getItem(CK + k) || 'null'); if (o) c = { at: o.at, p: Promise.resolve(o.d) }; } catch {} }
+  if (c && Date.now() - c.at < ttl) return c.p;
+  const p = api(path).then(d => { try { sessionStorage.setItem(CK + k, JSON.stringify({ at: Date.now(), d })); } catch {} return d; })
+    .catch(e => { memo.delete(k); throw e; });
+  memo.set(k, { at: Date.now(), p });
+  return p;
+}
+export function dropCache() {
+  memo.clear();
+  try { Object.keys(sessionStorage).filter(k => k.startsWith(CK)).forEach(k => sessionStorage.removeItem(k)); } catch {}
 }
