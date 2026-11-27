@@ -20,7 +20,7 @@ export const MODES = [
   { key: 'essay', name: 'Esai + Koreksi', ico: '✍️', cls: 'mi-essay', desc: 'Jawab dengan kata-katamu sendiri, dikoreksi maksudnya otomatis.' },
   { key: 'interaktif', name: 'Interaktif Visual', ico: '🧩', cls: 'mi-visual', desc: '8 cara: susun urutan & kalimat, cocokkan, kelompokkan, grafik, isi rumpang, benar/salah, cari yang berbeda.' },
 ];
-export const modeByKey = Object.fromEntries([...MODES, { key: 'duel', name: 'Duel', ico: '⚔️', cls: 'mi-game', desc: 'Duel multiplayer' }].map(m => [m.key, m]));
+export const modeByKey = Object.fromEntries([...MODES, { key: 'duel', name: 'Duel', ico: '⚔️', cls: 'mi-game', desc: 'Duel multiplayer' }, { key: 'skd', name: 'Simulasi SKD 2026', ico: '🏛️', cls: 'mi-pg', desc: 'Simulasi CAT SKD CPNS 2026' }].map(m => [m.key, m]));
 
 export const DIFFS = [
   { key: 'easy', name: 'Easy', sub: 'Dasar', sec: 60, gameSec: 30, pts: 10 },

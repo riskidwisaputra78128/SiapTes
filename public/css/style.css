@@ -1385,3 +1385,37 @@ body.sc-dim #scene[data-scene="kosmik"] .sc-tint { background: rgba(3, 6, 22, .5
 .busy-bar button { font-size: 16px; font-weight: 800; color: #3b1d02; opacity: .7; padding: 0 4px; }
 @keyframes busyIn { from { opacity: 0; transform: translate(-50%, -14px); } }
 @media (max-width: 859px) { .busy-bar { top: calc(64px + var(--safe-t, 0px)); font-size: 12.5px; } }
+
+/* ───── Simulasi SKD CAT 2026 ───── */
+.skd-banner { display: flex; align-items: center; gap: 14px; width: 100%; padding: 14px 16px; margin-top: 14px; border-radius: 20px; color: var(--text); font: inherit; cursor: pointer; background: linear-gradient(120deg, rgba(239,68,68,.16), rgba(56,189,248,.14)) !important; border-color: rgba(248,113,113,.38) !important; }
+.skd-banner small { display: block; font-size: 11px; font-weight: 800; letter-spacing: .08em; color: #fca5a5; }
+.skd-banner b { display: block; font-size: 18px; } .skd-banner .dim { font-size: 13px; }
+.skd-ico { width: 52px; height: 52px; flex: none; border-radius: 16px; display: grid; place-items: center; font-size: 26px; background: linear-gradient(135deg, #ef4444, #38bdf8); box-shadow: 0 10px 24px -10px #ef4444; }
+.skd-go { font-weight: 800; color: #fca5a5; white-space: nowrap; }
+.skd-rules { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 14px 0 6px; }
+.skd-rule { display: flex; flex-direction: column; gap: 2px; padding: 10px; border-radius: 14px; background: var(--w5); border: 1px solid var(--line); text-align: center; }
+.skd-rule b { font-size: 18px; } .skd-rule .dim { font-size: 11.5px; }
+.skd-list { margin: 10px 0 14px; padding-left: 4px; list-style: none; display: grid; gap: 7px; font-size: 14px; line-height: 1.45; }
+.skd-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0 0 10px; }
+.skd-tabs button { display: flex; justify-content: center; gap: 8px; align-items: baseline; padding: 8px; border-radius: 12px; background: var(--w5); border: 1px solid var(--line); color: var(--text); font: inherit; cursor: pointer; }
+.skd-tabs button span { font-family: var(--num); font-size: 12px; color: var(--muted); }
+.skd-tabs button.on { border-color: var(--cyan); background: rgba(56,189,248,.14); }
+.skd-chip.twk { background: rgba(248,113,113,.18); } .skd-chip.tiu { background: rgba(56,189,248,.18); } .skd-chip.tkp { background: rgba(52,211,153,.18); }
+.skd-grid-h { display: flex; gap: 8px; align-items: baseline; margin: 12px 0 8px; }
+.skd-hero.pass { border-color: rgba(52,211,153,.5) !important; } .skd-hero.fail { border-color: rgba(248,113,113,.45) !important; }
+.skd-verdict { font-weight: 800; font-size: 13px; letter-spacing: .03em; }
+.skd-hero.pass .skd-verdict { color: var(--green); } .skd-hero.fail .skd-verdict { color: var(--red); }
+.skd-score { padding: 14px; border-radius: 18px; display: flex; flex-direction: column; gap: 8px; }
+.skd-score.ok { border-color: rgba(52,211,153,.45) !important; } .skd-score.no { border-color: rgba(248,113,113,.4) !important; }
+.skd-val b { font-family: var(--num); font-size: 30px; } .skd-val .dim { margin-left: 4px; }
+.skd-bar { position: relative; height: 8px; border-radius: 99px; background: var(--w5); overflow: visible; }
+.skd-bar i { position: absolute; inset: 0 auto 0 0; border-radius: 99px; background: linear-gradient(90deg, var(--cyan), var(--violet, #a78bfa)); }
+.skd-bar em { position: absolute; top: -4px; width: 2px; height: 16px; background: var(--amber); border-radius: 2px; }
+.skd-kh { padding: 10px 0; border-bottom: 1px solid var(--line); gap: 10px; } .skd-kh:last-of-type { border-bottom: 0; }
+.skd-rev summary { cursor: pointer; list-style: none; } .skd-rev summary::-webkit-details-marker { display: none; }
+.skd-rev[open] summary { margin-bottom: 10px; }
+.skd-pts { flex: none; width: 24px; height: 24px; border-radius: 8px; display: grid; place-items: center; font-family: var(--num); font-weight: 800; font-size: 13px; background: var(--w5); }
+.skd-pts.p5 { background: rgba(52,211,153,.28); } .skd-pts.p4 { background: rgba(56,189,248,.24); } .skd-pts.p0, .skd-pts.p1 { background: rgba(248,113,113,.24); }
+.review-item b { white-space: pre-line; }
+@media (max-width: 560px) { .skd-rules { grid-template-columns: repeat(3, minmax(0, 1fr)); } .skd-banner b { font-size: 16px; } .skd-tabs button { flex-direction: column; align-items: center; gap: 0; } }
+.opt-sym { font-size: 24px; line-height: 1.1; letter-spacing: .08em; }

@@ -13,7 +13,9 @@ export function shuffle(arr) {
 export function shuffleOptions(q) {
   if (q.type !== 'pg' || !Array.isArray(q.options) || q.noShuffle) return q;
   const order = shuffle(q.options.map((_, i) => i));
-  return { ...q, options: order.map(i => q.options[i]), answer: order.indexOf(q.answer) };
+  const out = { ...q, options: order.map(i => q.options[i]), answer: order.indexOf(q.answer) };
+  if (Array.isArray(q.scores)) out.scores = order.map(i => q.scores[i]);   // TKP: skor 1–5 ikut teracak
+  return out;
 }
 
 // Kunci pendek soal (dipakai klien untuk mengingat soal yang sudah pernah keluar)
@@ -42,12 +44,12 @@ async function cachedQuestions(category) {
   catch (e) { if (hit?.list) return hit.list; throw e; }   // Firestore gagal → pakai salinan lama bila ada
 }
 
-export async function pickQuestions({ category = 'campuran', difficulty = 'all', type = 'pg', limit = 10, fresh = false, seen = [] }) {
+export async function pickQuestions({ category = 'campuran', difficulty = 'all', type = 'pg', limit = 10, fresh = false, seen = [], only = null }) {
   let dbQs = [];
   try { dbQs = await cachedQuestions(category); } catch (e) { console.error('listQuestions', e.message); }
   const uniq = new Set();
   const pool = [...dbQs, ...SEED_QUESTIONS]
-    .filter(q => q.type === type && (category === 'campuran' || q.category === category))
+    .filter(q => q.type === type && (category === 'campuran' || q.category === category) && (!only || only(q)))
     .filter(q => (uniq.has(q.id) ? false : uniq.add(q.id)));
   // urutan "sudah dilihat": makin akhir di daftar = makin baru dilihat
   const seenRank = new Map(seen.map((k, i) => [k, i]));
@@ -86,4 +88,21 @@ export async function pickQuestions({ category = 'campuran', difficulty = 'all',
     picked = out;
   }
   return { questions: shuffle(picked).map(shuffleOptions), available: exact.length, filled };
+}
+
+// Simulasi SKD CAT sesuai Kepmen PANRB 674/2026: TWK 30 + TIU 35 + TKP 45 (TKP hanya soal berskor 1–5), urut TWK → TIU → TKP
+export const SKD_PLAN = [
+  { key: 'twk', n: 30, max: 150, pass: 65 },
+  { key: 'tiu', n: 35, max: 175, pass: 80 },
+  { key: 'tkp', n: 45, max: 225, pass: 166 },
+];
+export async function pickSKD(seen = []) {
+  const parts = await Promise.all(SKD_PLAN.map(p => pickQuestions({
+    category: p.key, difficulty: 'all', type: 'pg', limit: p.n, seen,
+    only: p.key === 'tkp' ? q => Array.isArray(q.scores) && q.scores.length === q.options.length : null,
+  })));
+  return {
+    questions: parts.flatMap((r, i) => r.questions.map(q => ({ ...q, section: SKD_PLAN[i].key }))),
+    plan: SKD_PLAN, minutes: 100,
+  };
 }

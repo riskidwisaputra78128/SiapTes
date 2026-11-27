@@ -8,7 +8,7 @@ import { mountEngine, IX_KIND } from './interactive.js';
 import { mountSprint } from './psikotes.js';
 import { setMood } from './sound.js';
 
-const L = ['A', 'B', 'C', 'D'];
+const L = ['A', 'B', 'C', 'D', 'E'];
 const BOT_INFO = {
   easy: { ico: '🐣', name: 'Pemula', desc: '±45% benar' },
   normal: { ico: '🤖', name: 'Cerdas', desc: '±65% benar' },

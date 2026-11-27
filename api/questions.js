@@ -1,8 +1,9 @@
+// GET  /api/questions?sim=skd                  → paket Simulasi SKD CAT 2026 (TWK 30, TIU 35, TKP 45)
 // GET  /api/questions?category=bi&difficulty=normal&mode=pg|game|essay|interaktif&limit=10&fresh=1&seen=k1,k2
 // POST /api/questions {action:'purge', count:100-200, dry?:true}  → hapus soal hasil generate secara acak (khusus admin)
 //      Penghapusan "meratakan": tiap soal yang dihapus diambil dari topik yang saat itu jumlahnya paling banyak.
 import { handle, query, send, readBody, httpError } from './_lib/http.js';
-import { pickQuestions, DIFFS, shuffle } from './_lib/pick.js';
+import { pickQuestions, pickSKD, DIFFS, shuffle } from './_lib/pick.js';
 import { requireUser, isAdmin } from './_lib/auth.js';
 import { getDB } from './_lib/db.js';
 
@@ -38,6 +39,8 @@ export default handle(['GET', 'POST'], async (req, res) => {
     return send(res, 200, await purge(b));
   }
   const p = query(req);
+  // Simulasi SKD CAT 2026 (110 soal, 100 menit)
+  if (p.get('sim') === 'skd') return send(res, 200, await pickSKD((p.get('seen') || '').split(',').filter(Boolean).slice(-300)));
   const mode = p.get('mode') || 'pg';
   const result = await pickQuestions({
     category: p.get('category') || 'campuran',

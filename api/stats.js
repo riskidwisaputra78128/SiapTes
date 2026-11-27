@@ -8,7 +8,7 @@ const CAT_NAMES = {
   keuangan: 'Perbankan & Keuangan', english: 'Bahasa Inggris', isu: 'Isu Terkini', psikologi: 'Tes Psikologi', campuran: 'Campuran',
 };
 const DIFF_NAMES = { easy: 'Easy', normal: 'Normal', hard: 'Hard', prof: 'Prof', all: 'Semua' };
-const MODE_NAMES = { pg: 'Pilihan Ganda', game: 'Arena Game', essay: 'Esai', interaktif: 'Interaktif Visual', duel: 'Duel' };
+const MODE_NAMES = { pg: 'Pilihan Ganda', game: 'Arena Game', essay: 'Esai', interaktif: 'Interaktif Visual', duel: 'Duel', skd: 'Simulasi SKD' };
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
 
 function agg(list) {

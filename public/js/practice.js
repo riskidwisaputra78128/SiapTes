@@ -15,9 +15,10 @@ function rememberSeen(list) {
 import { sfx } from './sound.js';
 import { CATEGORIES, MODES, DIFFS, catByKey, modeByKey, diffByKey } from './data.js';
 import { runInteractive } from './interactive.js';
+import { skdBanner, openSkdIntro, runSKD, renderSkdResult } from './skd.js';
 
 export const practice = { config: null, questions: [], result: null, active: false };
-const L = ['A', 'B', 'C', 'D'];
+const L = ['A', 'B', 'C', 'D', 'E'];
 
 // Interval yang otomatis berhenti bila elemen sudah tidak di layar
 function every(ms, el, fn) {
@@ -56,6 +57,7 @@ export function renderSetup(app, params) {
   <section class="fade-in">
     <h1 class="h1">Atur latihanmu</h1>
     <p class="muted" style="margin-top:0">Pilih mode, materi, dan level. Soal diacak setiap sesi.</p>
+    ${skdBanner()}
     <a href="#/psikotes" class="glass psi-banner tilt"><span class="psi-ico">🧩</span><span style="flex:1"><small>LATIHAN KHUSUS</small><b>Tes Psikologi</b>
       <span class="dim">Simulasi Kraepelin/Pauli, tes kecermatan, soal psikotes & materinya</span></span><span class="psi-go">Buka →</span></a>
 
@@ -107,6 +109,9 @@ export function renderSetup(app, params) {
   }).catch(() => {});
   $('#freshChk').onchange = e => (cfg.fresh = e.target.checked);
   sync();
+  const skdIntro = () => openSkdIntro({ seenKeys, rememberSeen, practice });
+  $('#skdOpen').onclick = skdIntro;
+  if (params.get('sim') === 'skd') setTimeout(skdIntro, 150);
 
   $('#startBtn').onclick = async () => {
     const btn = $('#startBtn'); btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
@@ -135,6 +140,7 @@ export function renderQuiz(app) {
   if (m === 'game') return runGame(app);
   if (m === 'essay') return runEssay(app);
   if (m === 'interaktif') return runInteractive(app, practice, { complete, metaHTML, srcHTML, confirmExit });
+  if (m === 'skd') return runSKD(app, practice, { complete, confirmExit });
   return runPG(app);
 }
 
@@ -171,7 +177,7 @@ function runPG(app) {
         ${metaHTML(q, st.i, n)}
         <p class="q-text">${esc(q.question)}</p>
         <div class="opts">${q.options.map((o, k) => `
-          <button class="opt ${st.ans[st.i] === k ? 'sel' : ''}" data-k="${k}"><span class="key">${L[k]}</span><span>${esc(o)}</span></button>`).join('')}</div>
+          <button class="opt ${st.ans[st.i] === k ? 'sel' : ''}" data-k="${k}"><span class="key">${L[k]}</span><span class="${/^[^a-z0-9]{1,8}$/i.test(o) ? 'opt-sym' : ''}">${esc(o)}</span></button>`).join('')}</div>
       </div>
       <div class="q-nav">
         <button class="btn ghost" id="prevBtn" ${st.i === 0 ? 'disabled' : ''}>← Sebelumnya</button>
@@ -215,8 +221,8 @@ function runPG(app) {
   const onKey = e => {
     if (!document.body.contains($('#qWrap'))) return removeEventListener('keydown', onKey);
     if (document.querySelector('.sheet')) return;
-    const k = '1234abcd'.indexOf(e.key.toLowerCase());
-    if (k >= 0) { st.ans[st.i] = k % 4; draw(); }
+    const k = '12345abcde'.indexOf(e.key.toLowerCase()) % 5;
+    if (k >= 0 && k < qs[st.i].options.length) { st.ans[st.i] = k; draw(); }
     if (e.key === 'ArrowRight' && st.i < n - 1) { st.i++; draw(); }
     if (e.key === 'ArrowLeft' && st.i > 0) { st.i--; draw(); }
   };
@@ -278,7 +284,7 @@ function runGame(app) {
     $$('.tile', app).forEach(b => (b.onclick = e => answer(+b.dataset.k, e)));
     $('#pFifty').onclick = () => {
       if (!st.fifty || st.locked) return; st.fifty--;
-      const wrong = [0, 1, 2, 3].filter(k => k !== q.answer).sort(() => Math.random() - 0.5).slice(0, 2);
+      const wrong = q.options.map((_, k) => k).filter(k => k !== q.answer).sort(() => Math.random() - 0.5).slice(0, q.options.length - 2);
       wrong.forEach(k => $(`.tile[data-k="${k}"]`).classList.add('gone'));
       $('#pFifty').disabled = true;
     };
@@ -352,8 +358,8 @@ function runGame(app) {
   }
   const onKey = e => {
     if (!document.body.contains($('#stage'))) return removeEventListener('keydown', onKey);
-    const k = '1234abcd'.indexOf(e.key.toLowerCase());
-    if (k >= 0 && !st.locked) answer(k % 4);
+    const k = '12345abcde'.indexOf(e.key.toLowerCase()) % 5;
+    if (k >= 0 && k < (qs[st.i]?.options.length || 4) && !st.locked) answer(k);
     else if (e.key === 'Enter' && st.locked) $('#nextQ')?.click();
   };
   addEventListener('keydown', onKey);
@@ -473,6 +479,7 @@ async function complete(r) {
 export function renderResult(app) {
   const r = practice.result;
   if (!r) { location.hash = '#/latihan'; return; }
+  if (r.mode === 'skd' && r.skd) return renderSkdResult(app, r, { session });
   const grade = r.score >= 90 ? 'S' : r.score >= 75 ? 'A' : r.score >= 60 ? 'B' : r.score >= 40 ? 'C' : 'D';
   const msg = { S: 'Luar biasa! Kamu siap tempur 🔥', A: 'Hebat! Tinggal sedikit lagi menuju sempurna.', B: 'Bagus! Pelajari pembahasan untuk naik level.', C: 'Lumayan. Ulangi materi ini agar makin kuat.', D: 'Jangan menyerah — baca pembahasan lalu coba lagi.' }[grade];
   const cfg = practice.config;

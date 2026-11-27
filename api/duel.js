@@ -65,7 +65,7 @@ function botAnswer(room, i) {
     return { ratio: rr, ok: rr >= (room.mode === 'esai' ? 0.75 : 0.999), ms, pts: Math.round(rr * points(ms, room.perQ)) };
   }
   const ok = r() < b.acc;
-  const wrong = [0, 1, 2, 3].filter(k => k !== q.answer);
+  const wrong = q.options.map((_, k) => k).filter(k => k !== q.answer);
   return { c: ok ? q.answer : wrong[Math.floor(r() * wrong.length)], ok, ms, pts: ok ? points(ms, room.perQ) : 0 };
 }
 
@@ -344,7 +344,7 @@ export default handle(['GET', 'POST'], async (req, res) => {
       if (tl.phase !== 'question' || tl.idx !== index) throw httpError(409, 'Waktu soal ini sudah habis');
       if (p.power) throw httpError(400, '50:50 sudah dipakai');
       const q = r.questions[index];
-      const removed = [0, 1, 2, 3].filter(k => k !== q.answer).sort(() => Math.random() - 0.5).slice(0, 2);
+      const removed = q.options.map((_, k) => k).filter(k => k !== q.answer).sort(() => Math.random() - 0.5).slice(0, q.options.length - 2);
       p.power = { idx: index, removed };
       return { room: r, result: { removed } };
     });
@@ -385,7 +385,7 @@ export default handle(['GET', 'POST'], async (req, res) => {
         a = { ratio, ok: ratio >= 0.999, ms, pts: Math.round(ratio * points(ms, r.perQ)) };
       } else {
         const choice = parseInt(b.choice, 10);
-        if (!(choice >= 0 && choice <= 3)) throw httpError(400, 'Pilihan tidak valid');
+        if (!(choice >= 0 && choice < (q.options?.length || 4))) throw httpError(400, 'Pilihan tidak valid');
         const ok = choice === q.answer;
         let pts = ok ? points(ms, r.perQ) : 0;
         if (mode === 'arena' && ok) { let streak = 0; for (let j = index - 1; j >= 0 && p.answers?.[j]?.ok; j--) streak++; pts = Math.round(pts * Math.min(1.5, 1 + streak * 0.1)); }
