@@ -15,12 +15,12 @@ export const CATEGORIES = [
 export const catByKey = Object.fromEntries(CATEGORIES.map(c => [c.key, c]));
 
 export const MODES = [
-  { key: 'pg', name: 'Pilihan Ganda', ico: '📝', cls: 'mi-pg', desc: 'Simulasi ujian A–D dengan timer, navigasi soal, dan pembahasan.' },
-  { key: 'game', name: 'Arena Game', ico: '🎮', cls: 'mi-game', desc: '3 nyawa, waktu per soal, combo poin, dan power-up 50:50.' },
-  { key: 'essay', name: 'Esai + Koreksi', ico: '✍️', cls: 'mi-essay', desc: 'Jawab dengan kata-katamu sendiri, dikoreksi maksudnya otomatis.' },
-  { key: 'interaktif', name: 'Interaktif Visual', ico: '🧩', cls: 'mi-visual', desc: '8 cara: susun urutan & kalimat, cocokkan, kelompokkan, grafik, isi rumpang, benar/salah, cari yang berbeda.' },
+  { key: 'pg', name: 'Pilihan Ganda', ico: '📝', cls: 'mi-pg', desc: 'Ujian bertimer, navigasi soal & pembahasan.' },
+  { key: 'game', name: 'Arena Game', ico: '🎮', cls: 'mi-game', desc: '3 nyawa, combo poin & power-up 50:50.' },
+  { key: 'essay', name: 'Esai + Koreksi', ico: '✍️', cls: 'mi-essay', desc: 'Jawab bebas, dikoreksi otomatis.' },
+  { key: 'interaktif', name: 'Interaktif Visual', ico: '🧩', cls: 'mi-visual', desc: '8 permainan: susun, cocokkan, grafik & lainnya.' },
 ];
-export const modeByKey = Object.fromEntries([...MODES, { key: 'duel', name: 'Duel', ico: '⚔️', cls: 'mi-game', desc: 'Duel multiplayer' }, { key: 'skd', name: 'Simulasi SKD 2026', ico: '🏛️', cls: 'mi-pg', desc: 'Simulasi CAT SKD CPNS 2026' }].map(m => [m.key, m]));
+export const modeByKey = Object.fromEntries([...MODES, { key: 'duel', name: 'Duel', ico: '⚔️', cls: 'mi-game', desc: 'Duel multiplayer' }, { key: 'skd', name: 'Simulasi SKD 2026', ico: '🏛️', cls: 'mi-pg', desc: 'Simulasi CAT SKD CPNS 2026' }, { key: 'sim', name: 'Simulasi Seleksi', ico: '🎯', cls: 'mi-pg', desc: 'Simulasi seleksi BI / OJK / Telkom' }].map(m => [m.key, m]));
 
 export const DIFFS = [
   { key: 'easy', name: 'Easy', sub: 'Dasar', sec: 60, gameSec: 30, pts: 10 },

@@ -14,7 +14,7 @@ const listCache = globalThis.__matList || (globalThis.__matList = { at: 0, ver: 
 const brief = m => ({
   id: m.id, core: !!m.core, category: m.category, title: m.title, summary: m.summary,
   day: m.day || null, readMin: m.readMin || 3, createdAt: m.createdAt || null, sourcesCount: m.sources?.length || 0, basis: m.core ? 'inti' : m.basis || 'terkini',
-  cover: m.cover || null, highlight: (m.stats?.[0] ? `${m.stats[0].value}${m.stats[0].unit ? ' ' + m.stats[0].unit : ''} · ${m.stats[0].label}` : m.keyPoints?.[0]) || null, extras: !!(m.flow?.length || m.stats?.length || m.quiz?.length),
+  cover: m.cover || null, highlight: (m.stats?.[0] ? `${m.stats[0].value}${m.stats[0].unit ? ' ' + m.stats[0].unit : ''} · ${m.stats[0].label}` : m.keyPoints?.[0]) || null, extras: true,
 });
 
 export default handle(['GET', 'DELETE'], async (req, res) => {

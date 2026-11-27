@@ -90,19 +90,25 @@ export async function pickQuestions({ category = 'campuran', difficulty = 'all',
   return { questions: shuffle(picked).map(shuffleOptions), available: exact.length, filled };
 }
 
-// Simulasi SKD CAT sesuai Kepmen PANRB 674/2026: TWK 30 + TIU 35 + TKP 45 (TKP hanya soal berskor 1–5), urut TWK → TIU → TKP
-export const SKD_PLAN = [
-  { key: 'twk', n: 30, max: 150, pass: 65 },
-  { key: 'tiu', n: 35, max: 175, pass: 80 },
-  { key: 'tkp', n: 45, max: 225, pass: 166 },
-];
-export async function pickSKD(seen = []) {
-  const parts = await Promise.all(SKD_PLAN.map(p => pickQuestions({
-    category: p.key, difficulty: 'all', type: 'pg', limit: p.n, seen,
-    only: p.key === 'tkp' ? q => Array.isArray(q.scores) && q.scores.length === q.options.length : null,
-  })));
-  return {
-    questions: parts.flatMap((r, i) => r.questions.map(q => ({ ...q, section: SKD_PLAN[i].key }))),
-    plan: SKD_PLAN, minutes: 100,
-  };
+// ───── Simulasi seleksi ─────
+// skd    : SKD CPNS sesuai Kepmen PANRB 674/2026 — TWK 30 + TIU 35 + TKP 45 (TKP hanya soal berskor 1–5)
+// bi     : pola seleksi PCPM Bank Indonesia — Potensi Dasar + Pengetahuan Teknis (kebanksentralan, pengetahuan umum, bahasa Inggris)
+// ojk    : pola seleksi PCAM OJK — Tes Potensi Dasar + Tes Kemampuan Umum (jasa keuangan, bahasa Inggris, isu)
+// telkom : pola tes online Telkom / Rekrutmen Bersama BUMN — TKD, AKHLAK, TWK, bidang, bahasa Inggris
+const scored = q => Array.isArray(q.scores) && q.scores.length === q.options.length;
+export const SIM_PLANS = {
+  skd: [{ key: 'twk', cats: [['twk', 30]] }, { key: 'tiu', cats: [['tiu', 35]] }, { key: 'tkp', cats: [['tkp', 45]], only: scored }],
+  bi: [{ key: 'tpd', cats: [['tiu', 30]] }, { key: 'bank', cats: [['bi', 25]] }, { key: 'umum', cats: [['isu', 8], ['keuangan', 7]] }, { key: 'eng', cats: [['english', 20]] }],
+  ojk: [{ key: 'tpd', cats: [['tiu', 30]] }, { key: 'sjk', cats: [['ojk', 20], ['keuangan', 10]] }, { key: 'eng', cats: [['english', 15]] }, { key: 'isu', cats: [['isu', 10]] }],
+  telkom: [{ key: 'tkd', cats: [['tiu', 40]] }, { key: 'akhlak', cats: [['bumn', 30]] }, { key: 'twk', cats: [['twk', 10]] }, { key: 'bidang', cats: [['telkom', 20]] }, { key: 'eng', cats: [['english', 10]] }],
+};
+export async function pickSim(exam, seen = []) {
+  const plan = SIM_PLANS[exam];
+  if (!plan) return null;
+  const parts = await Promise.all(plan.map(async p => {
+    const lists = await Promise.all(p.cats.map(([category, n]) => pickQuestions({ category, difficulty: 'all', type: 'pg', limit: n, seen, only: p.only || null })));
+    return shuffle(lists.flatMap(r => r.questions)).map(q => ({ ...q, section: p.key }));
+  }));
+  return { exam, questions: parts.flat() };
 }
+export const pickSKD = seen => pickSim('skd', seen);

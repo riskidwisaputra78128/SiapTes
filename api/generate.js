@@ -136,6 +136,7 @@ Format JSON:
  "stats":[{"value":"6","unit":"%","label":"proyeksi pertumbuhan 2027","icon":"1 emoji"}],  // 0-4 angka penting, HANYA angka yang tertulis di judul berita; kosongkan jika tidak ada
  "flow":[{"icon":"1 emoji","title":"maks 4 kata","desc":"1 kalimat"}],  // 3-5 langkah alur sebab → akibat / mekanisme kebijakan
  "quiz":[{"q":"pertanyaan cek pemahaman","options":["a","b","c","d"],"answer":0,"why":"1 kalimat alasan"}],  // tepat 2 soal
+ "tf":[{"s":"pernyataan singkat tentang materi","ok":true,"why":"1 kalimat alasan"}],  // 4 pernyataan Benar/Salah, campuran benar & salah
  "keyPoints":["poin kunci singkat"],                              // 3-5
  "glossary":[{"term":"istilah","def":"definisi singkat"}],          // 3-5
  "tips":["tips menjawab soal terkait topik ini"],                  // 2-3
@@ -160,6 +161,7 @@ function buildMaterial(out, cat, headlines, pics = [], extra = {}) {
     let a = typeof x.answer === 'number' ? x.answer : /^[A-D]$/i.test(str(x.answer)) ? 'ABCD'.indexOf(str(x.answer).toUpperCase()) : options.indexOf(str(x.answer));
     return { q: str(x.q || x.question), options, answer: a, why: str(x.why || x.explanation) };
   }).filter(x => x.q && x.options.length >= 2 && x.answer >= 0 && x.answer < x.options.length).slice(0, 3);
+  const tf = (out.tf || []).map(x => ({ s: str(x.s || x.statement).slice(0, 200), ok: x.ok === true || /^(true|benar)$/i.test(str(x.ok)), why: str(x.why).slice(0, 200) })).filter(x => x.s).slice(0, 5);
   // Gambar: foto dari berita sumber (ANTARA/CNBC) + berita bergambar lain dengan topik sama
   const srcObjs = !headlines.length ? [] : sources.length ? sources : headlines.slice(0, 3).map(h => ({ title: h.title, link: h.link, publisher: h.source, date: h.date, image: h.image || null }));
   const seenImg = new Set();
@@ -173,7 +175,7 @@ function buildMaterial(out, cat, headlines, pics = [], extra = {}) {
     sections, keyPoints: (out.keyPoints || []).map(str).filter(Boolean).slice(0, 6),
     glossary: (out.glossary || []).map(g => ({ term: str(g.term), def: str(g.def) })).filter(g => g.term && g.def).slice(0, 6),
     tips: (out.tips || []).map(str).filter(Boolean).slice(0, 4),
-    sources: srcObjs, stats, flow, quiz, images, cover: images[0]?.url || null,
+    sources: srcObjs, stats, flow, quiz, tf, images, cover: images[0]?.url || null,
     readMin: Math.max(2, Math.round(words / 180)), createdAt: Date.now(), generated: true, basis: 'terkini', ...extra,
   };
 }

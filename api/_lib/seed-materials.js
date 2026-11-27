@@ -1,5 +1,6 @@
 import { EXTRA_MATERIALS } from './seed-materials-extra.js';
 import { SKD2026_MATERIALS } from './seed-materials-skd2026.js';
+import { INTERACTIVE_PACK } from './seed-materials-interactive.js';
 // Materi Inti (selalu tersedia). Materi harian dari berita dibuat otomatis oleh /api/generate.
 const M = (category, title, summary, sections, keyPoints, glossary, tips) => ({
   id: 'core-' + category, core: true, category, title, summary, sections, keyPoints, glossary, tips,
@@ -139,3 +140,8 @@ export const CORE_MATERIALS = [
 CORE_MATERIALS.push(...EXTRA_MATERIALS);
 // materi CPNS sesuai Kepmen PANRB 674/2026 (kisi-kisi SKD & nilai ambang batas) → total 33
 CORE_MATERIALS.push(...SKD2026_MATERIALS);
+// semua materi inti dilengkapi paket interaktif: angka penting, alur, kuis, dan Benar/Salah (tidak menimpa yang sudah ada)
+for (const m of CORE_MATERIALS) {
+  const pack = INTERACTIVE_PACK[m.id] || {};
+  for (const k of ['stats', 'flow', 'quiz', 'tf']) if (!m[k]?.length && pack[k]?.length) m[k] = pack[k];
+}

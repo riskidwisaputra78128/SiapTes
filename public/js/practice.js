@@ -15,7 +15,7 @@ function rememberSeen(list) {
 import { sfx } from './sound.js';
 import { CATEGORIES, MODES, DIFFS, catByKey, modeByKey, diffByKey } from './data.js';
 import { runInteractive } from './interactive.js';
-import { skdBanner, openSkdIntro, runSKD, renderSkdResult } from './skd.js';
+import { simBanner, openSimIntro, runSim, renderSimResult, EXAMS } from './skd.js';
 
 export const practice = { config: null, questions: [], result: null, active: false };
 const L = ['A', 'B', 'C', 'D', 'E'];
@@ -57,15 +57,15 @@ export function renderSetup(app, params) {
   <section class="fade-in">
     <h1 class="h1">Atur latihanmu</h1>
     <p class="muted" style="margin-top:0">Pilih mode, materi, dan level. Soal diacak setiap sesi.</p>
-    ${skdBanner()}
+    ${simBanner()}
     <a href="#/psikotes" class="glass psi-banner tilt"><span class="psi-ico">🧩</span><span style="flex:1"><small>LATIHAN KHUSUS</small><b>Tes Psikologi</b>
       <span class="dim">Simulasi Kraepelin/Pauli, tes kecermatan, soal psikotes & materinya</span></span><span class="psi-go">Buka →</span></a>
 
     <div class="glass setup-step" style="margin-top:14px">
       <div class="row" style="margin-bottom:12px"><span class="step-no">1</span><b>Mode latihan</b></div>
-      <div class="mode-pick">${MODES.map(m => `
-        <button class="mode-opt" data-mode="${m.key}"><span class="mode-icon ${m.cls}" style="width:46px;height:46px;font-size:22px">${m.ico}</span>
-        <span><b>${m.name}</b><p>${m.desc}</p></span></button>`).join('')}</div>
+      <div class="lat-modes">${MODES.map(m => `
+        <button class="mode-opt" data-mode="${m.key}"><span class="mode-icon ${m.cls}">${m.ico}</span>
+        <span class="mo-txt"><b>${m.name}</b><p>${m.desc}</p></span></button>`).join('')}</div>
     </div>
 
     <div class="glass setup-step section">
@@ -109,9 +109,9 @@ export function renderSetup(app, params) {
   }).catch(() => {});
   $('#freshChk').onchange = e => (cfg.fresh = e.target.checked);
   sync();
-  const skdIntro = () => openSkdIntro({ seenKeys, rememberSeen, practice });
-  $('#skdOpen').onclick = skdIntro;
-  if (params.get('sim') === 'skd') setTimeout(skdIntro, 150);
+  const simIntro = k => openSimIntro(k, { seenKeys, rememberSeen, practice });
+  $$('[data-sim]', app).forEach(b => (b.onclick = () => simIntro(b.dataset.sim)));
+  if (EXAMS[params.get('sim')]) setTimeout(() => simIntro(params.get('sim')), 150);
 
   $('#startBtn').onclick = async () => {
     const btn = $('#startBtn'); btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
@@ -140,7 +140,7 @@ export function renderQuiz(app) {
   if (m === 'game') return runGame(app);
   if (m === 'essay') return runEssay(app);
   if (m === 'interaktif') return runInteractive(app, practice, { complete, metaHTML, srcHTML, confirmExit });
-  if (m === 'skd') return runSKD(app, practice, { complete, confirmExit });
+  if (m === 'skd' || m === 'sim') return runSim(app, practice, { complete, confirmExit });
   return runPG(app);
 }
 
@@ -479,7 +479,7 @@ async function complete(r) {
 export function renderResult(app) {
   const r = practice.result;
   if (!r) { location.hash = '#/latihan'; return; }
-  if (r.mode === 'skd' && r.skd) return renderSkdResult(app, r, { session });
+  if ((r.mode === 'skd' || r.mode === 'sim') && r.sim) return renderSimResult(app, r, { session });
   const grade = r.score >= 90 ? 'S' : r.score >= 75 ? 'A' : r.score >= 60 ? 'B' : r.score >= 40 ? 'C' : 'D';
   const msg = { S: 'Luar biasa! Kamu siap tempur 🔥', A: 'Hebat! Tinggal sedikit lagi menuju sempurna.', B: 'Bagus! Pelajari pembahasan untuk naik level.', C: 'Lumayan. Ulangi materi ini agar makin kuat.', D: 'Jangan menyerah — baca pembahasan lalu coba lagi.' }[grade];
   const cfg = practice.config;
