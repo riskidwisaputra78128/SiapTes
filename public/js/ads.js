@@ -16,20 +16,61 @@ export async function bindAdSlots() {
   el.hidden = false;
   let i = 0;
   const seen = new Set();
-  const draw = () => {
-    const a = ads[i];
-    seen.add(a.id);
-    el.innerHTML = `<a class="glass ad-card fade-in ${a.img && a.wide ? 'wide' : ''}" href="${esc(a.link)}" target="_blank" rel="noopener sponsored" data-ad="${esc(a.id)}">
-      ${a.img ? `<img class="${a.wide ? 'ad-banner' : ''}" src="${esc(a.img)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : '<span class="ad-ico">📢</span>'}
+  // gelembung dekoratif yang melayang naik-turun di latar kartu (posisi/ukuran/tempo acak per kartu)
+  const bubbles = () => `<span class="ad-bubbles" aria-hidden="true">${Array.from({ length: 7 }, () => {
+    const sz = 8 + Math.random() * 26;
+    return `<i style="left:${Math.round(Math.random() * 92)}%;width:${sz.toFixed(0)}px;height:${sz.toFixed(0)}px;animation-duration:${(4 + Math.random() * 5).toFixed(1)}s;animation-delay:-${(Math.random() * 6).toFixed(1)}s"></i>`;
+  }).join('')}</span>`;
+  const card = a => `<a class="glass ad-card ${a.img && a.wide ? 'wide' : ''}" href="${esc(a.link)}" target="_blank" rel="noopener sponsored" data-ad="${esc(a.id)}" draggable="false">
+      ${bubbles()}
+      ${a.img ? `<img class="${a.wide ? 'ad-banner' : ''}" src="${esc(a.img)}" alt="" loading="lazy" draggable="false" referrerpolicy="no-referrer" onerror="this.remove()">` : '<span class="ad-ico">📢</span>'}
       <span class="ad-body"><small class="ad-label">Promosi</small><b>${esc(a.title)}</b>${a.text ? `<span class="dim">${esc(a.text)}</span>` : ''}</span>
-      <span class="btn sm ad-cta">${esc(a.cta || 'Lihat promo')}</span></a>
-      ${ads.length > 1 ? `<div class="ad-dots">${ads.map((_, k) => `<i class="${k === i ? 'on' : ''}"></i>`).join('')}</div>` : ''}`;
-    $('[data-ad]', el).addEventListener('click', () => track({ c: [a.id] }));
+      <span class="btn sm ad-cta">${esc(a.cta || 'Lihat promo')}</span></a>`;
+  const many = ads.length > 1;
+  el.innerHTML = `<div class="ad-viewport fade-in"><div class="ad-track">${ads.map(a => `<div class="ad-slide">${card(a)}</div>`).join('')}</div>
+    ${many ? '<button class="ad-nav prev" aria-label="Iklan sebelumnya">‹</button><button class="ad-nav next" aria-label="Iklan berikutnya">›</button>' : ''}</div>
+    ${many ? `<div class="ad-dots">${ads.map((_, k) => `<button data-dot="${k}" aria-label="Iklan ${k + 1}"></button>`).join('')}</div>` : ''}`;
+  const vp = $('.ad-viewport', el), rail = $('.ad-track', el);
+  const go = (k, anim = true) => {
+    i = (k + ads.length) % ads.length; seen.add(ads[i].id);
+    rail.style.transition = anim ? 'transform .35s cubic-bezier(.2,.8,.2,1)' : 'none';
+    rail.style.transform = `translateX(${-i * 100}%)`;
+    $$('[data-dot]', el).forEach((d, n) => d.classList.toggle('on', n === i));
   };
-  draw();
-  if (ads.length > 1) {
-    const t = setInterval(() => { if (!document.body.contains(el)) return clearInterval(t); i = (i + 1) % ads.length; draw(); }, 7000);
+  go(0, false);
+  // klik iklan (bukan saat sedang menggeser) → hitung klik
+  let dragged = false;
+  $$('[data-ad]', el).forEach(link => {
+    link.addEventListener('click', e => { if (dragged) { e.preventDefault(); return; } track_({ c: [link.dataset.ad] }); });
+  });
+  if (many) {
+    let timer = null;
+    const auto = () => { clearInterval(timer); timer = setInterval(() => { if (!document.body.contains(el)) return clearInterval(timer); go(i + 1); }, 7000); };
+    auto();
+    $('.ad-nav.prev', el).onclick = () => { go(i - 1); auto(); };
+    $('.ad-nav.next', el).onclick = () => { go(i + 1); auto(); };
+    $$('[data-dot]', el).forEach(d => (d.onclick = () => { go(+d.dataset.dot); auto(); }));
+    // geser dengan jari / mouse
+    let sx = 0, sy = 0, dx = 0, active = false, horiz = null;
+    vp.addEventListener('pointerdown', e => { if (e.button > 0 || e.target.closest('.ad-nav')) return; active = true; horiz = null; dragged = false; sx = e.clientX; sy = e.clientY; dx = 0; clearInterval(timer); });
+    vp.addEventListener('pointermove', e => {
+      if (!active) return;
+      dx = e.clientX - sx; const dy = e.clientY - sy;
+      if (horiz === null && (Math.abs(dx) > 6 || Math.abs(dy) > 6)) { horiz = Math.abs(dx) > Math.abs(dy); if (horiz) vp.setPointerCapture(e.pointerId); }
+      if (!horiz) return;
+      dragged = Math.abs(dx) > 6;
+      rail.style.transition = 'none';
+      rail.style.transform = `translateX(calc(${-i * 100}% + ${dx}px))`;
+    });
+    const end = () => {
+      if (!active) return; active = false;
+      if (horiz) { const w = vp.clientWidth || 1; go(dx < -w * 0.18 ? i + 1 : dx > w * 0.18 ? i - 1 : i); }
+      setTimeout(() => (dragged = false), 0);
+      auto();
+    };
+    vp.addEventListener('pointerup', end); vp.addEventListener('pointercancel', end); vp.addEventListener('pointerleave', e => { if (active && e.pointerType === 'mouse') end(); });
   }
+  const track_ = b => track(b);
   // tayangan dikirim sekali per kunjungan beranda (dikumpulkan)
   setTimeout(() => { if (document.body.contains(el)) track({ v: [...seen] }); }, 2500);
   const stop = () => { const rest = [...seen].filter(id => !sent.has(id)); if (rest.length) track({ v: rest }); };

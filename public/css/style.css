@@ -1747,3 +1747,24 @@ body.intro-open { overflow: hidden; }
 .ad-card.wide .ad-body{padding:0 12px}
 .ad-card.wide .ad-cta{margin-right:12px}
 @media (max-width:480px){.ad-card.wide img.ad-banner{width:100%;height:auto}}
+/* ── Iklan beranda: slide yang bisa digeser ── */
+.ad-viewport{position:relative;overflow:hidden;border-radius:18px;touch-action:pan-y;user-select:none}
+.ad-track{display:flex;will-change:transform}
+.ad-slide{flex:0 0 100%;min-width:0}
+.ad-slide .ad-card{height:100%}
+.ad-card img{-webkit-user-drag:none;pointer-events:none}
+.ad-nav{position:absolute;top:50%;transform:translateY(-50%);width:34px;height:34px;border-radius:50%;border:1px solid rgba(255,255,255,.25);background:rgba(10,8,20,.55);color:#fff;font-size:22px;line-height:1;display:grid;place-items:center;cursor:pointer;opacity:0;transition:opacity .2s;z-index:2;backdrop-filter:blur(6px)}
+.ad-nav.prev{left:8px}.ad-nav.next{right:8px}
+.ad-viewport:hover .ad-nav{opacity:1}
+@media (hover:none){.ad-nav{display:none}}
+.ad-dots{display:flex;justify-content:center;gap:6px;margin-top:8px}
+.ad-dots button{width:7px;height:7px;padding:0;border:0;border-radius:99px;background:rgba(255,255,255,.3);cursor:pointer;transition:width .25s,background .25s}
+.ad-dots button.on{width:18px;background:#fbbf24}
+/* ── Gelembung melayang di kartu iklan ── */
+.ad-card{isolation:isolate}
+.ad-bubbles{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:-1}
+.ad-bubbles i{position:absolute;bottom:-20%;border-radius:50%;background:radial-gradient(circle at 30% 30%,rgba(255,255,255,.55),rgba(251,191,36,.18) 45%,rgba(244,114,182,.08) 70%,transparent 72%);box-shadow:inset 0 0 6px rgba(255,255,255,.25);animation:adBubble ease-in-out infinite alternate}
+@keyframes adBubble{0%{bottom:-15%;transform:translateX(0) scale(.9);opacity:.3}50%{transform:translateX(10px) scale(1);opacity:.8}100%{bottom:85%;transform:translateX(-8px) scale(1.08);opacity:.4}}
+.ad-card.wide .ad-bubbles{top:auto;height:58%}
+:root[data-fx="off"] .ad-bubbles{display:none}
+@media (prefers-reduced-motion:reduce){.ad-bubbles i{animation:none;opacity:.3}}
