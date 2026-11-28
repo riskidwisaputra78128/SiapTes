@@ -1,5 +1,5 @@
-import { api, session, cachedApi } from './api.js';
-import { $, $$, esc, fmt, countUp, timeAgo, avatar } from './ui.js';
+import { api, session, cachedApi, dropCache } from './api.js';
+import { $, $$, esc, fmt, countUp, timeAgo, avatar, sheet, toast } from './ui.js';
 import { catByKey, modeByKey, diffByKey } from './data.js';
 import { limits } from './plan.js';
 
@@ -127,13 +127,15 @@ export async function renderLeaderboard(app) {
   app.innerHTML = `
   <section class="stack fade-in">
     <div class="row between wrap"><div><h1 class="h1">Papan peringkat</h1><p class="muted" style="margin:0">Poin dari semua mode latihan. Reset setiap minggu & bulan.</p></div>
-    <div class="tabs" id="lbTabs"><button data-p="week" class="on">Minggu ini</button><button data-p="month">Bulan ini</button></div></div>
+    <div class="row" style="gap:8px;flex-wrap:wrap"><div class="tabs" id="lbTabs"><button data-p="week" class="on">Minggu ini</button><button data-p="month">Bulan ini</button></div>
+      ${session.user?.admin ? '<button class="btn sm ghost" id="lbReset" title="Kosongkan papan peringkat">🧹 Reset</button>' : ''}</div></div>
     <div class="glass card" id="lbBox"><div class="skeleton" style="height:260px"></div></div>
   </section>`;
   const load = async () => {
     const box = $('#lbBox'); box.innerHTML = '<div class="skeleton" style="height:260px"></div>';
     const d = await cachedApi('/leaderboard?period=' + period, 30000);
-    if (!d.top.length) { box.innerHTML = '<div class="empty"><div style="font-size:44px">🏆</div>Belum ada peserta di periode ini. Jadilah yang pertama!</div>'; return; }
+    const since = d.resetAt ? `<p class="dim" style="text-align:center;margin:10px 0 0;font-size:12.5px">🧹 Direset admin ${new Date(d.resetAt).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} WIB — skor dihitung sejak saat itu.</p>` : '';
+    if (!d.top.length) { box.innerHTML = '<div class="empty"><div style="font-size:44px">🏆</div>Belum ada peserta di periode ini. Jadilah yang pertama!</div>' + since; return; }
     const t = d.top;
     const pod = (r, cls) => r ? `<div class="p ${cls}">${avatar(r, 'pod')}<div class="nm">${esc(r.name)}</div><div class="block">${cls === 'p1' ? '👑' : cls === 'p2' ? '🥈' : '🥉'}<br>${fmt(r.points)}</div></div>` : '<div></div>';
     box.innerHTML = `
@@ -142,8 +144,28 @@ export async function renderLeaderboard(app) {
         <div style="flex:1;min-width:0"><b>${esc(r.name)}${r.me ? ' (kamu)' : ''}</b><div class="dim">${r.questions} soal · akurasi ${r.accuracy}%</div></div>
         <b style="font-family:var(--num)">${fmt(r.points)}</b></div>`).join('')}
       ${d.mine && d.mine.rank > 20 ? `<div class="lb-row me" style="margin-top:10px"><span class="rank">${d.mine.rank}</span><b style="flex:1">Kamu</b><b>${fmt(d.mine.points)}</b></div>` : ''}
-      <p class="dim" style="text-align:center;margin:14px 0 0">${d.participants} peserta aktif</p>`;
+      <p class="dim" style="text-align:center;margin:14px 0 0">${d.participants} peserta aktif</p>${since}`;
   };
+  const rb = $('#lbReset', app);
+  if (rb) rb.onclick = () => sheet(`<h3 class="h2">🧹 Reset papan peringkat</h3>
+      <p class="muted">Papan peringkat periode berjalan dikosongkan dan skor mulai dihitung dari nol sejak sekarang. <b>Riwayat latihan & Evaluasi pengguna tidak dihapus.</b> Tindakan ini tidak bisa dibatalkan.</p>
+      <div class="seg" id="lbWhich" style="margin:10px 0 14px"><button data-w="week">Minggu ini</button><button data-w="month">Bulan ini</button><button data-w="all" class="on">Keduanya</button></div>
+      <div class="row" style="gap:8px"><button class="btn ghost" data-a="n" style="flex:1">Batal</button><button class="btn" data-a="y" style="flex:1">Kosongkan</button></div>`,
+    (el, close) => {
+      let which = 'all';
+      $$('#lbWhich button', el).forEach(b => (b.onclick = () => { which = b.dataset.w; $$('#lbWhich button', el).forEach(x => x.classList.toggle('on', x === b)); }));
+      $('[data-a=n]', el).onclick = close;
+      $('[data-a=y]', el).onclick = async () => {
+        const y = $('[data-a=y]', el);
+        if (y.dataset.sure !== '1') { y.dataset.sure = '1'; y.textContent = 'Yakin? Klik lagi'; return; }
+        y.disabled = true;
+        try {
+          await api('/leaderboard', { method: 'POST', body: { action: 'reset', which } });
+          ['week', 'month'].forEach(p => dropCache('/leaderboard?period=' + p));
+          toast('Papan peringkat dikosongkan', 'ok'); close(); load();
+        } catch (e) { toast(e.message, 'err'); y.disabled = false; }
+      };
+    });
   $$('#lbTabs button', app).forEach(b => (b.onclick = () => { period = b.dataset.p; $$('#lbTabs button', app).forEach(x => x.classList.toggle('on', x === b)); load(); }));
   await load();
 }
