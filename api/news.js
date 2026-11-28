@@ -1,6 +1,7 @@
 // GET /api/news — berita terkini + jumlah bank soal (publik) + status sistem
 import { handle, send, startOfDayWIB } from './_lib/http.js';
 import { getDB, firebaseEnabled, dataVersion } from './_lib/db.js';
+import { activeAds } from './_lib/ads.js';
 import { aiEnabled, aiModelsInfo } from './_lib/ai.js';
 import { fetchHeadlines, backupAll, CAT_KEYWORDS } from './_lib/news.js';
 import { imageForNews } from './_lib/ogimage.js';
@@ -66,7 +67,7 @@ export default handle(['GET'], async (req, res) => {
     if (items.length) { news = { at: Date.now(), items }; db.setMeta('news3', news).catch(() => {}); }
   }
   const ver = await dataVersion(db);
-  const [last, bank, settings, mats] = await Promise.all([db.getMeta('lastGenerate').catch(() => null), sharedGet('bank', ver.q || 0, () => questionBank(db)), db.getMeta('settings').catch(() => null), sharedGet('mats', ver.m || 0, () => db.listMaterialsSince(startOfDayWIB(Date.now()), 10).catch(() => []))]);   // hemat kuota: hanya materi hari ini (maks 10 dokumen)
+  const [last, bank, settings, mats, adsMap] = await Promise.all([db.getMeta('lastGenerate').catch(() => null), sharedGet('bank', ver.q || 0, () => questionBank(db)), db.getMeta('settings').catch(() => null), sharedGet('mats', ver.m || 0, () => db.listMaterialsSince(startOfDayWIB(Date.now()), 10).catch(() => [])), db.getMeta('ads').catch(() => null)]);   // hemat kuota: hanya materi hari ini (maks 10 dokumen)
   // ringkasan update hari ini (untuk pop-up harian setelah login)
   const sod = startOfDayWIB(Date.now());
   const newMats = mats.filter(m => m.title && m.createdAt >= sod);
@@ -86,7 +87,8 @@ export default handle(['GET'], async (req, res) => {
     updatedAt: news?.at || null,
     bank,
     daily,
-    settings: { defaultTheme: settings?.defaultTheme || 'dark', tutorEnabled: settings?.tutorEnabled !== false, tutorDaily: settings?.tutorDaily || 20 },
+    ads: activeAds(adsMap),
+    settings: { defaultTheme: settings?.defaultTheme || 'senja', tutorEnabled: settings?.tutorEnabled !== false, tutorDaily: settings?.tutorDaily || 20 },
     status: { firebase: firebaseEnabled(), ai: aiEnabled(), generatedQuestions: bank.generated, lastGenerate: last, models },
   });
 });

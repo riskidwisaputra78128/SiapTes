@@ -16,6 +16,7 @@ import { sfx } from './sound.js';
 import { CATEGORIES, MODES, DIFFS, catByKey, modeByKey, diffByKey } from './data.js';
 import { runInteractive } from './interactive.js';
 import { simBanner, openSimIntro, runSim, renderSimResult, EXAMS } from './skd.js';
+import { limits, tierNow, upgradeSheet, handleGate, lockIco, TIER_NAME } from './plan.js';
 
 export const practice = { config: null, questions: [], result: null, active: false };
 const L = ['A', 'B', 'C', 'D', 'E'];
@@ -57,6 +58,8 @@ export function renderSetup(app, params) {
   <section class="fade-in">
     <h1 class="h1">Atur latihanmu</h1>
     <p class="muted" style="margin-top:0">Pilih mode, materi, dan level. Soal diacak setiap sesi.</p>
+    ${tierNow() === 'guest' ? `<div class="glass gate-bar"><span>🔒</span><span><b>Mode tamu: latihan & simulasi terkunci.</b> Daftar gratis untuk mulai latihan — progresmu juga tersimpan.</span><a class="btn sm" href="#/login?daftar=1" id="gateReg">Daftar gratis</a></div>`
+      : tierNow() === 'free' ? `<div class="glass gate-bar free"><span>🌱</span><span><b>Paket Free:</b> PG & Arena, level Easy–Normal, maks 10 soal, 3 sesi/hari. <a href="#/langganan" class="link-btn">Upgrade</a> untuk semua mode & tanpa batas.</span></div>` : ''}
     ${simBanner()}
     <a href="#/psikotes" class="glass psi-banner tilt"><span class="psi-ico">🧩</span><span style="flex:1"><small>LATIHAN KHUSUS</small><b>Tes Psikologi</b>
       <span class="dim">Simulasi Kraepelin/Pauli, tes kecermatan, soal psikotes & materinya</span></span><span class="psi-go">Buka →</span></a>
@@ -89,20 +92,30 @@ export function renderSetup(app, params) {
     </div>
   </section>`;
 
+  const L = limits(), T = tierNow();
+  const needFor = { mode: m => (L.modes.includes(m) ? null : T === 'guest' ? 'login' : 'plus'), diff: d => (L.levels.includes(d) ? null : T === 'guest' ? 'login' : d === 'prof' ? 'pro' : 'plus'), count: n => (n <= L.maxCount ? null : T === 'guest' ? 'login' : T === 'plus' ? 'pro' : 'plus') };
+  const gate = (need, what) => upgradeSheet({ need, reason: need === 'login' ? 'Daftar gratis untuk mulai latihan.' : `${what} tersedia mulai paket ${TIER_NAME[need]}.` });
+  // pilihan awal yang terkunci → pindah ke yang diizinkan
+  if (T !== 'guest') {
+    if (needFor.mode(cfg.mode)) cfg.mode = 'pg';
+    if (needFor.diff(cfg.difficulty)) cfg.difficulty = 'normal';
+  }
   const sync = () => {
-    $$('[data-mode]', app).forEach(b => b.classList.toggle('on', b.dataset.mode === cfg.mode));
+    $$('[data-mode]', app).forEach(b => { b.classList.toggle('on', b.dataset.mode === cfg.mode); const n = needFor.mode(b.dataset.mode); b.classList.toggle('locked', !!n); b.dataset.lock = n ? lockIco(n) : ''; });
+    $$('[data-diff]', app).forEach(b => { const n = needFor.diff(b.dataset.diff); b.classList.toggle('locked', !!n); b.dataset.lock = n ? lockIco(n) : ''; });
     $$('[data-cat]', app).forEach(b => b.classList.toggle('on', b.dataset.cat === cfg.category));
     $$('[data-diff]', app).forEach(b => b.classList.toggle('on', b.dataset.diff === cfg.difficulty));
     if (!counts().includes(cfg.count)) cfg.count = counts()[1];
-    $('#counts').innerHTML = counts().map(n => `<button class="pill ${n === cfg.count ? 'on' : ''}" data-n="${n}">${n} soal</button>`).join('');
-    $$('[data-n]', app).forEach(b => (b.onclick = () => { cfg.count = +b.dataset.n; sync(); }));
+    if (T !== 'guest' && needFor.count(cfg.count)) cfg.count = counts().filter(n => !needFor.count(n)).pop() || counts()[0];
+    $('#counts').innerHTML = counts().map(n => { const k = needFor.count(n); return `<button class="pill ${n === cfg.count ? 'on' : ''} ${k ? 'locked' : ''}" data-n="${n}" data-lock="${k ? lockIco(k) : ''}">${n} soal</button>`; }).join('');
+    $$('[data-n]', app).forEach(b => (b.onclick = () => { const k = needFor.count(+b.dataset.n); if (k) return gate(k, `${b.dataset.n} soal per sesi`); cfg.count = +b.dataset.n; sync(); }));
     const d = diffByKey[cfg.difficulty];
     $('#sumTitle').textContent = `${modeByKey[cfg.mode].name} · ${catByKey[cfg.category].name}`;
     $('#sumSub').textContent = `${d.name} · ${cfg.count} soal · ${cfg.mode === 'game' ? d.gameSec + ' dtk/soal' : cfg.mode === 'pg' ? '±' + Math.round((cfg.count * d.sec) / 60) + ' menit' : cfg.mode === 'interaktif' ? 'santai, tanpa timer' : 'tanpa batas waktu'}`;
   };
-  $$('[data-mode]', app).forEach(b => (b.onclick = () => { cfg.mode = b.dataset.mode; sync(); }));
+  $$('[data-mode]', app).forEach(b => (b.onclick = () => { const k = needFor.mode(b.dataset.mode); if (k && T !== 'guest') return gate(k, `Mode ${modeByKey[b.dataset.mode].name}`); cfg.mode = b.dataset.mode; sync(); }));
   $$('[data-cat]', app).forEach(b => (b.onclick = () => { cfg.category = b.dataset.cat; sync(); }));
-  $$('[data-diff]', app).forEach(b => (b.onclick = () => { cfg.difficulty = b.dataset.diff; sync(); }));
+  $$('[data-diff]', app).forEach(b => (b.onclick = () => { const k = needFor.diff(b.dataset.diff); if (k && T !== 'guest') return gate(k, `Level ${diffByKey[b.dataset.diff].name}`); cfg.difficulty = b.dataset.diff; sync(); }));
   getInfo().then(d => {
     if (!d.bank) return;
     $$('[data-count]', app).forEach(el => { const n = d.bank.byCategory?.[el.dataset.count]; if (n != null) el.textContent = `${fmt(n)} soal`; });
@@ -110,10 +123,14 @@ export function renderSetup(app, params) {
   $('#freshChk').onchange = e => (cfg.fresh = e.target.checked);
   sync();
   const simIntro = k => openSimIntro(k, { seenKeys, rememberSeen, practice });
-  $$('[data-sim]', app).forEach(b => (b.onclick = () => simIntro(b.dataset.sim)));
-  if (EXAMS[params.get('sim')]) setTimeout(() => simIntro(params.get('sim')), 150);
+  const simNeed = k => (L.sims[k] ? null : T === 'guest' ? 'login' : 'plus');
+  $$('[data-sim]', app).forEach(b => { const n = simNeed(b.dataset.sim); b.classList.toggle('locked', !!n); b.dataset.lock = n ? lockIco(n) : ''; });
+  $$('[data-sim]', app).forEach(b => (b.onclick = () => { const n = simNeed(b.dataset.sim); if (n) return gate(n, `Simulasi ${EXAMS[b.dataset.sim].short}`); simIntro(b.dataset.sim); }));
+  if (EXAMS[params.get('sim')] && !simNeed(params.get('sim'))) setTimeout(() => simIntro(params.get('sim')), 150);
+  $('#gateReg')?.addEventListener('click', () => session.clear());
 
   $('#startBtn').onclick = async () => {
+    if (T === 'guest') return upgradeSheet({ reason: 'Daftar gratis untuk mulai latihan.' });
     const btn = $('#startBtn'); btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
     try {
       const qs = new URLSearchParams({ category: cfg.category, difficulty: cfg.difficulty, mode: cfg.mode, limit: cfg.count, fresh: cfg.fresh ? '1' : '0', seen: seenKeys().slice(-300).join(',') });
@@ -128,7 +145,8 @@ export function renderSetup(app, params) {
       window.dispatchEvent(new Event('bg:burst'));
       location.hash = '#/quiz';
     } catch (e) {
-      toast(e.message, 'err'); btn.disabled = false; btn.textContent = 'Mulai ▶';
+      if (!handleGate(e)) toast(e.message, 'err');
+      btn.disabled = false; btn.textContent = 'Mulai ▶';
     }
   };
 }

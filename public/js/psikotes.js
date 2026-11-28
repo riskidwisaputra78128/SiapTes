@@ -1,6 +1,7 @@
 // Latihan Khusus Tes Psikologi: simulasi Kraepelin/Pauli & tes kecermatan (huruf/simbol hilang)
 import { $, $$, esc, toast } from './ui.js';
 import { sfx, setMood } from './sound.js';
+import { tierNow, upgradeSheet } from './plan.js';
 
 const BEST = 'sl_psi_best';
 const best = () => { try { return JSON.parse(localStorage.getItem(BEST) || '{}'); } catch { return {}; } };
@@ -34,7 +35,10 @@ export function renderPsikotes(app, params) {
     </div>
     <div id="psiStage"></div>
   </section>`;
-  $$('[data-go]', app).forEach(el => (el.onclick = () => (el.dataset.go === 'kraepelin' ? setupKraepelin(app) : setupCermat(app))));
+  $$('[data-go]', app).forEach(el => (el.onclick = () => {
+    if (tierNow() === 'guest') return upgradeSheet({ reason: 'Daftar gratis untuk mencoba simulasi psikotes.' });
+    el.dataset.go === 'kraepelin' ? setupKraepelin(app) : setupCermat(app);
+  }));
   if (params?.get('t') === 'kraepelin') setupKraepelin(app);
   if (params?.get('t') === 'cermat') setupCermat(app);
 }
@@ -42,18 +46,19 @@ export function renderPsikotes(app, params) {
 /* ───────── Kraepelin ───────── */
 function setupKraepelin(app) {
   const st = $('#psiStage', app);
+  const lite = tierNow() === 'free';   // Free: versi singkat (maks 10 kolom)
   const cfg = { cols: 10, sec: 15 };
   const paint = () => {
     st.innerHTML = `<div class="glass card psi-setup fade-in">
       <h2 class="h2">🔢 Atur simulasi Kraepelin</h2>
       <p class="dim" style="margin-top:4px">Kerjakan dari bawah ke atas. Jumlahkan angka yang disorot dan ketik <b>angka satuannya</b> (7 + 8 = 15 → ketik <b>5</b>). Saat waktu kolom habis, otomatis pindah ke kolom baru.</p>
       <div class="row wrap" style="gap:18px;margin-top:10px">
-        <div><div class="dim psi-lbl">Jumlah kolom</div><div class="pill-group">${[5, 10, 20, 30].map(n => `<button class="pill ${cfg.cols === n ? 'on' : ''}" data-cols="${n}">${n}</button>`).join('')}</div></div>
+        <div><div class="dim psi-lbl">Jumlah kolom${lite ? ' <span class="chip sm">Free: versi singkat</span>' : ''}</div><div class="pill-group">${[5, 10, 20, 30].map(n => `<button class="pill ${cfg.cols === n ? 'on' : ''} ${lite && n > 10 ? 'locked' : ''}" data-lock="${lite && n > 10 ? '⭐' : ''}" data-cols="${n}">${n}</button>`).join('')}</div></div>
         <div><div class="dim psi-lbl">Waktu per kolom</div><div class="pill-group">${[10, 15, 20, 30].map(n => `<button class="pill ${cfg.sec === n ? 'on' : ''}" data-sec="${n}">${n} dtk</button>`).join('')}</div></div>
       </div>
       <p class="dim" style="font-size:13px">Total ±${Math.round(cfg.cols * cfg.sec / 60 * 10) / 10} menit. Tes asli biasanya 40–50 kolom × 15–30 detik.</p>
       <button class="btn" id="kStart">Mulai simulasi ▶</button></div>`;
-    $$('[data-cols]', st).forEach(b => (b.onclick = () => { cfg.cols = +b.dataset.cols; paint(); }));
+    $$('[data-cols]', st).forEach(b => (b.onclick = () => { if (lite && +b.dataset.cols > 10) return upgradeSheet({ need: 'plus', reason: 'Simulasi Kraepelin lengkap (20–30 kolom) tersedia mulai paket Plus.' }); cfg.cols = +b.dataset.cols; paint(); }));
     $$('[data-sec]', st).forEach(b => (b.onclick = () => { cfg.sec = +b.dataset.sec; paint(); }));
     $('#kStart', st).onclick = () => runKraepelin(cfg);
   };

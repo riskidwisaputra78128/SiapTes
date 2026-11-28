@@ -4,6 +4,7 @@
 import { handle, readBody, send, query, httpError } from './_lib/http.js';
 import { avatarRoute } from './_lib/avatar-route.js';
 import { feedbackRoute } from './_lib/feedback-route.js';
+import { adsRoute } from './_lib/ads.js';
 
 // Pengaturan situs (khusus admin): tema default untuk pengguna yang belum memilih tema sendiri
 const THEME_KEYS = ['dark', 'light', 'dongeng', 'modern', 'senja', 'fajar', 'malam', 'pagi', 'sakura', 'shinobi', 'kosmik', 'pro'];
@@ -22,6 +23,7 @@ const settingsRoute = handle(['POST'], async (req, res) => {
   send(res, 200, { ok: true, ...patch });
 });
 import { getUser, requireUser, isAdmin, canKantor } from './_lib/auth.js';
+import { tierOf, listPayments } from './_lib/plan.js';
 import { getDB } from './_lib/db.js';
 import { avatarMap, avatarUrl } from './_lib/avatar.js';
 
@@ -76,8 +78,10 @@ const presenceRoute = handle(['GET', 'POST'], async (req, res) => {
     await db.setPresence(user.uid, rec);
     presUpsert(user.uid, rec);
   }
-  const [list, kantor] = await Promise.all([onlineList(db, user.uid), canKantor(db, user).catch(() => isAdmin(user))]);
-  send(res, 200, { count: list.length, users: list, hidden: !!b.hidden, kantor });
+  const [list, kantor, t] = await Promise.all([onlineList(db, user.uid), canKantor(db, user).catch(() => isAdmin(user)), tierOf(db, user).catch(() => null)]);
+  // admin: pembayaran terbaru (untuk notifikasi "pembayaran masuk")
+  const lastPay = isAdmin(user) ? (await listPayments(db, 3).catch(() => []))[0] || null : undefined;
+  send(res, 200, { count: list.length, users: list, hidden: !!b.hidden, kantor, tier: t?.tier, until: t?.until, trial: t?.src === 'trial', lastPay });
 });
 
 // Foto profil ikut di endpoint ini agar total function tetap 12 (batas paket Hobby)
@@ -85,5 +89,6 @@ export default function (req, res) {
   const q = query(req);
   if (q.get('op') === 'feedback') return feedbackRoute(req, res);
   if (q.get('op') === 'settings') return settingsRoute(req, res);
+  if (q.get('op') === 'ads') return adsRoute(req, res);   // iklan: kelola (admin) & lacak tayang/klik
   return q.get('avatar') || q.get('op') === 'avatar' ? avatarRoute(req, res) : presenceRoute(req, res);
 }

@@ -1,4 +1,5 @@
 // Arena Duel: lobby (buat/gabung/tonton room) + ruang duel real-time (polling) — 5 mode + penonton "View duel"
+import { handleGate, tierNow } from './plan.js';
 import { api, session } from './api.js';
 import { $, $$, esc, toast, sheet, confetti, vibrate, fmt, icons, avatar } from './ui.js';
 import { sfx } from './sound.js';
@@ -70,6 +71,7 @@ function roomCard(r, mine) {
 }
 
 async function joinRoom(code) {
+  if (tierNow() === 'guest') return handleGate({ data: { needLogin: true }, message: 'Daftar gratis untuk ikut duel. Tamu hanya bisa menonton.' });
   try {
     await api('/duel', { method: 'POST', body: { action: 'join', code } });
     location.hash = `#/duel?code=${code}`;
@@ -99,7 +101,7 @@ function renderLobby(app) {
   const ci = $('#joinCode');
   ci.oninput = () => (ci.value = ci.value.toUpperCase().replace(/[^A-Z0-9]/g, ''));
   $('#joinForm').onsubmit = e => { e.preventDefault(); if (ci.value.length !== 6) return toast('Kode room 6 karakter', 'err'); joinRoom(ci.value); };
-  $('#createBtn').onclick = openCreate;
+  $('#createBtn').onclick = () => (tierNow() === 'guest' ? handleGate({ data: { needLogin: true }, message: 'Daftar gratis untuk membuat room duel. Tamu hanya bisa menonton.' }) : openCreate());
   setDuelPresence(null);
   onlineWidget($('#onlineDuel'));
 
@@ -176,13 +178,14 @@ function openCreate() {
       try {
         const r = await api('/duel', { method: 'POST', body: { action: 'create', ...cfg, title: $('#cTitle', el).value, category: $('#cCat', el).value } });
         close(); location.hash = `#/duel?code=${r.code}`;
-      } catch (e) { toast(e.message, 'err'); btn.disabled = false; btn.textContent = '⚔️ Buat room'; }
+      } catch (e) { btn.disabled = false; btn.textContent = '⚔️ Buat room'; if (handleGate(e)) close(); else toast(e.message, 'err'); }
     };
   });
 }
 
 /* ───────── Ruang duel ───────── */
 function renderRoom(app, code, wantView) {
+  if (tierNow() === 'guest') wantView = true;   // tamu hanya menonton
   let st = null, offset = 0, lastKey = '', raf = 0, timer = 0, saved = false, autoJoined = false, alive = true, fails = 0;
   let engine = null, sprint = null, sprintIdx = -1, lastSent = 0, sendT = 0, lastClose = 0, essayDraft = '';
   const now = () => Date.now() + offset;

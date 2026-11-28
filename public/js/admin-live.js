@@ -874,7 +874,11 @@ export async function renderAdminLive(app) {
       Object.assign(state, await api('/admin-live'));
       state.recent.slice().reverse().forEach(a => { const id = a.name + a.createdAt; if (seenAttempts.has(id)) return; seenAttempts.add(id); feed.push({ id, ico: modeByKey[a.mode]?.ico || '📝', text: `<b>${esc(a.name)}</b> selesai ${modeByKey[a.mode]?.name || a.mode} ${esc(catByKey[a.category]?.name || '')} — skor ${a.score}`, at: a.createdAt }); });
       feed.sort((a, b) => b.at - a.at); renderFeed();
-    } catch (e) { toast(e.message, 'err'); }
+    } catch (e) {
+      // akses Kantor dicabut admin → keluar dari Kantor seketika
+      if (e.status === 403) { session.patch({ kantor: false }); window.dispatchEvent(new Event('kantor:change')); toast('Akses Kantor Live kamu sudah dicabut admin.', 'err'); return false; }
+      toast(e.message, 'err');
+    }
     const demoOn = $('#demoChk')?.checked; window.__ccDemo = demoOn;
     if (demoOn) { if (!demo.length) makeDemo(); else shuffleDemo(); } else demo = [];
     window.__ccDemoUsers = demo;

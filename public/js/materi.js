@@ -3,15 +3,28 @@ import { $, $$, esc, toast, timeAgo, confetti, countUp, sheet } from './ui.js';
 import { addDockAction } from './dock.js';
 import { sfx } from './sound.js';
 import { catByKey } from './data.js';
+import { tierNow, limits, upgradeSheet, lockIco } from './plan.js';
 
-const READ_KEY = 'sl_read';
-const readSet = () => { try { return new Set(JSON.parse(localStorage.getItem(READ_KEY) || '[]')); } catch { return new Set(); } };
-const markRead = id => { try { const s = readSet(); s.add(id); localStorage.setItem(READ_KEY, JSON.stringify([...s].slice(-500))); } catch {} };
+// Status "sudah dibaca" & progres misi disimpan PER AKUN (bukan per browser) → tidak ikut ke akun lain di perangkat yang sama
+const who = () => session.user?.uid || 'tamu';
+const READ_KEY = () => 'sl_read:' + who();
+const readSet = () => { try { return new Set(JSON.parse(localStorage.getItem(READ_KEY()) || '[]')); } catch { return new Set(); } };
+const markRead = id => { try { const s = readSet(); s.add(id); localStorage.setItem(READ_KEY(), JSON.stringify([...s].slice(-500))); } catch {} };
+try { localStorage.removeItem('sl_read'); } catch {}   // format lama (dipakai bersama semua akun) dibuang
 
 // Misi belajar interaktif per materi (disimpan di perangkat)
-const MIS_KEY = 'sl_mis:';
-const misLoad = id => { try { return JSON.parse(localStorage.getItem(MIS_KEY + id) || '{}'); } catch { return {}; } };
-const misSave = (id, o) => { try { localStorage.setItem(MIS_KEY + id, JSON.stringify(o)); } catch {} };
+const MIS_KEY = () => 'sl_mis:' + who() + ':';
+const misLoad = id => { try { return JSON.parse(localStorage.getItem(MIS_KEY() + id) || '{}'); } catch { return {}; } };
+const misSave = (id, o) => { try { localStorage.setItem(MIS_KEY() + id, JSON.stringify(o)); } catch {} };
+
+// "Sabtu, 28 Nov 2026 · 12.54 WIB"
+const fmtStamp = ms => {
+  if (!ms) return '—';
+  try {
+    const d = new Date(ms), z = { timeZone: 'Asia/Jakarta' };
+    return `${d.toLocaleDateString('id-ID', { ...z, weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' })} · ${d.toLocaleTimeString('id-ID', { ...z, hour: '2-digit', minute: '2-digit' })} WIB`;
+  } catch { return new Date(ms).toISOString().slice(0, 16).replace('T', ' '); }
+};
 
 const todayKey = () => new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10);
 function dayLabel(day) {
@@ -26,8 +39,9 @@ function dayLabel(day) {
 // isi materi yang sudah pernah dibuka disimpan di perangkat (12 jam) → dibuka lagi tanpa minta ke server
 const MAT_KEY = 'sl_mat2:', MAT_TTL = 12 * 3600e3;
 async function materialById(id) {
-  try { const o = JSON.parse(localStorage.getItem(MAT_KEY + id) || 'null'); if (o && Date.now() - o.at < MAT_TTL && o.d?.material) return o.d; } catch {}
+  try { const o = JSON.parse(localStorage.getItem(MAT_KEY + id) || 'null'); if (o && Date.now() - o.at < MAT_TTL && o.d?.material && !o.d.material.locked) return o.d; } catch {}
   const d = await api('/materials?id=' + encodeURIComponent(id));
+  if (d.material?.locked) return d;   // versi terkunci (tamu / di luar paket) tidak disimpan
   try {
     localStorage.setItem(MAT_KEY + id, JSON.stringify({ at: Date.now(), d }));
     const keys = Object.keys(localStorage).filter(k => k.startsWith(MAT_KEY));
@@ -218,13 +232,38 @@ export async function renderMateri(app, params) {
   draw();
 }
 
+// Pratinjau materi terkunci (Tamu: wajib daftar · Free: materi harian di luar 3 terbaru)
+function renderLocked(app, m) {
+  const c = catByKey[m.category] || {};
+  const guest = m.locked === 'login';
+  app.innerHTML = `<article class="stack fade-in mat-detail">
+    <a href="#/materi" class="link-btn">← Kembali ke materi</a>
+    <div class="glass card mat-hero"><div class="mat-hero-body">
+      <div class="row wrap" style="gap:6px"><span class="chip">${c.ico || '📘'} ${esc(c.name || m.category)}</span>${m.core ? '<span class="chip">📘 Materi Inti</span>' : ''}<span class="chip">⏱️ ${m.readMin} menit</span></div>
+      <h1 class="h1" style="margin:10px 0 6px">${esc(m.title)}</h1><p class="muted">${esc(m.summary || '')}</p></div></div>
+    <div class="glass card locked-body">
+      <h2 class="h2">📑 Isi materi</h2>
+      <ol class="locked-toc">${(m.sections || []).map(x => `<li><span>${esc(x.heading)}</span><i>🔒</i></li>`).join('')}</ol>
+      ${(m.keyPoints || []).length ? `<div class="locked-kp">${m.keyPoints.map(k => `<div class="kp-card"><span class="kp-n">★</span><span>${esc(k)}</span></div>`).join('')}<div class="kp-card blur">… poin kunci lainnya</div></div>` : ''}
+      <div class="locked-cta"><div class="gate-ico">${guest ? '🔒' : '⭐'}</div>
+        <b>${guest ? 'Daftar gratis untuk membaca materi ini' : 'Materi harian ini tersedia di paket Plus'}</b>
+        <p class="muted" style="margin:4px 0 12px">${guest ? 'Akun gratis bisa membaca semua 33 materi inti dan 3 materi harian terbaru.' : 'Paket Free bisa membaca 3 materi harian terbaru. Upgrade untuk membuka semua materi & arsip.'}</p>
+        ${guest ? '<a class="btn" href="#/login?daftar=1" id="lkReg">Daftar gratis</a>' : '<a class="btn" href="#/langganan?need=plus">Lihat paket Plus</a>'}</div>
+    </div></article>`;
+  $('#lkReg')?.addEventListener('click', () => session.clear());
+}
+
 async function renderDetail(app, id) {
   app.innerHTML = '<div class="skeleton" style="height:420px"></div>';
-  const { material: m } = await materialById(id);
+  let { material: m } = await materialById(id);
+  if (m.locked) return renderLocked(app, m);
   const c = catByKey[m.category] || {};
+  const canIx = limits().interactive;   // aktivitas interaktif: paket Plus ke atas
   const read = readSet().has(m.id);
   const imgs = (m.images || []).filter(x => x.url !== m.cover);
   const quiz = quizOf(m);
+  const ixLocked = !canIx && (m.stats?.length || m.flow?.length || m.tf?.length || m.keyPoints?.length);
+  if (!canIx) { m = { ...m, stats: [], flow: [], tf: [], glossary: (m.glossary || []).slice(0, 2) }; }
   const fig = (im, i) => `<figure class="glass mat-fig" style="animation-delay:${i * .05}s">
       <img src="${esc(im.url)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.closest('figure').remove()">
       <figcaption><span>📷 ${esc(im.title)}</span>${im.link ? `<a href="${esc(im.link)}" target="_blank" rel="noopener">${esc(im.source || 'Sumber')} ↗</a>` : ''}</figcaption></figure>`;
@@ -252,6 +291,8 @@ async function renderDetail(app, id) {
     </header>
 
     <div class="glass mission" id="mission"></div>
+    ${ixLocked ? `<a class="glass gate-card" href="#/langganan?need=plus&why=${encodeURIComponent('Aktivitas interaktif materi tersedia mulai paket Plus.')}"><span class="gate-ico sm">⭐</span>
+      <span><b>Buka aktivitas interaktif</b><br><span class="dim">Tebak angka penting, susun alur, Benar/Salah, cocokkan istilah — tersedia di paket Plus & Pro.</span></span><b class="grad-text">Upgrade →</b></a>` : ''}
 
     ${m.sections.length > 1 ? `<nav class="sec-nav" id="secNav">${m.sections.map((s, i) => `<button data-go="${i}"><span>${i + 1}</span>${esc(s.heading)}</button>`).join('')}</nav>` : ''}
 
@@ -307,6 +348,8 @@ async function renderDetail(app, id) {
       ${m.sources.map(s => `<a class="news-item" href="${esc(s.link)}" target="_blank" rel="noopener">${srcThumb(s)}<div style="min-width:0"><span class="nt">${esc(s.title)}</span>
         <div class="dim">${esc(s.publisher || '')}${s.date ? ' · ' + timeAgo(s.date) : ''}</div></div></a>`).join('')}
       <p class="dim" style="margin:10px 0 0">Materi dirangkum otomatis oleh AI dari judul berita. Selalu cek detail di sumber aslinya.</p></div>` : ''}
+
+    <p class="mat-stamp">🕒 ${m.core ? 'Materi inti · diperbarui' : 'Dibuat'} ${fmtStamp(m.core ? m.updatedAt : m.createdAt)}</p>
 
     <div class="glass start-bar">
       <button class="btn ghost" id="readBtn" ${read ? 'disabled' : ''}>${read ? '✓ Sudah dibaca' : '✓ Tandai dibaca'}</button>

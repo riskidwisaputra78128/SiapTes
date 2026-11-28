@@ -1,7 +1,7 @@
 import { $, $$, sheet, toast } from './ui.js';
 
 export const THEMES = [
-  { key: 'dark', name: 'Gelap', ico: '🌙', desc: 'Default, nyaman malam hari', meta: '#070b1a',
+  { key: 'dark', name: 'Gelap', ico: '🌙', desc: 'Klasik, nyaman malam hari', meta: '#070b1a',
     prev: { bg: 'linear-gradient(135deg,#070b1a,#1e1b4b)', card: 'rgba(255,255,255,.08)', a: '#22d3ee', b: '#a78bfa' } },
   { key: 'light', name: 'Terang', ico: '☀️', desc: 'Bersih & cerah untuk siang', meta: '#eef2fb',
     prev: { bg: 'linear-gradient(135deg,#eef2fb,#e0e7ff)', card: '#ffffff', a: '#06b6d4', b: '#6366f1' } },
@@ -28,8 +28,10 @@ export const THEMES = [
 ];
 const KEY = 'sl_theme';
 
+// Tema bawaan saat pertama kali membuka website (sebelum ada pilihan admin/pengguna): Shinobi Senja
+export const DEFAULT_THEME = 'senja';
 export function currentTheme() {
-  try { return localStorage.getItem(KEY) || localStorage.getItem(KEY + '_default') || 'dark'; } catch { return 'dark'; }
+  try { return localStorage.getItem(KEY) || localStorage.getItem(KEY + '_default') || DEFAULT_THEME; } catch { return DEFAULT_THEME; }
 }
 export const userPickedTheme = () => { try { return !!localStorage.getItem(KEY); } catch { return false; } };
 // Tema default dari admin: dipakai bila pengguna belum memilih tema sendiri
@@ -66,7 +68,7 @@ export function openThemePicker() {
   (el, close) => {
     $('#themeReset', el)?.addEventListener('click', () => {
       try { localStorage.removeItem(KEY); } catch {}
-      const t = applyTheme(localStorage.getItem(KEY + '_default') || 'dark', { save: false });
+      const t = applyTheme(localStorage.getItem(KEY + '_default') || DEFAULT_THEME, { save: false });
       toast(`Mengikuti tema default: ${t.name} ${t.ico}`, 'ok'); setTimeout(close, 300);
     });
     $$('[data-theme-key]', el).forEach(b => (b.onclick = () => {

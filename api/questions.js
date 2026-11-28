@@ -4,7 +4,8 @@
 //      Penghapusan "meratakan": tiap soal yang dihapus diambil dari topik yang saat itu jumlahnya paling banyak.
 import { handle, query, send, readBody, httpError } from './_lib/http.js';
 import { pickQuestions, pickSim, DIFFS, shuffle } from './_lib/pick.js';
-import { requireUser, isAdmin } from './_lib/auth.js';
+import { requireUser, isAdmin, getUser } from './_lib/auth.js';
+import { guardPractice, guardSim } from './_lib/plan.js';
 import { getDB } from './_lib/db.js';
 
 const CATS = ['isu', 'twk', 'tiu', 'tkp', 'ojk', 'bi', 'bumn', 'telkom', 'keuangan', 'english', 'psikologi'];
@@ -39,18 +40,27 @@ export default handle(['GET', 'POST'], async (req, res) => {
     return send(res, 200, await purge(b));
   }
   const p = query(req);
-  // Simulasi seleksi: skd (CPNS 2026), bi, ojk, telkom
+  const user = getUser(req);
+  const db = await getDB();
+  // Simulasi seleksi: skd (CPNS 2026), bi, ojk, telkom — dibatasi sesuai paket langganan
   if (p.get('sim')) {
+    if (!['skd', 'bi', 'ojk', 'telkom'].includes(p.get('sim'))) throw httpError(400, 'Jenis simulasi tidak dikenal');
+    await guardSim(db, user, p.get('sim'));
     const d = await pickSim(p.get('sim'), (p.get('seen') || '').split(',').filter(Boolean).slice(-300));
     if (!d) throw httpError(400, 'Jenis simulasi tidak dikenal');
     return send(res, 200, d);
   }
-  const mode = p.get('mode') || 'pg';
+  const mode = ['pg', 'game', 'essay', 'interaktif'].includes(p.get('mode')) ? p.get('mode') : 'pg';
+  const difficulty = DIFFS.includes(p.get('difficulty')) ? p.get('difficulty') : 'all';
+  const limit = Math.min(Math.max(parseInt(p.get('limit') || '10', 10) || 10, 1), 50);
+  // latihan dibatasi sesuai paket (Tamu: harus daftar; Free: PG/Game, Easy–Normal, 10 soal, 3 sesi/hari; dst.)
+  await guardPractice(db, user, { mode, difficulty, limit });
+  res.setHeader('Cache-Control', 'no-store');
   const result = await pickQuestions({
     category: p.get('category') || 'campuran',
-    difficulty: DIFFS.includes(p.get('difficulty')) ? p.get('difficulty') : 'all',
+    difficulty,
     type: mode === 'essay' ? 'essay' : mode === 'interaktif' ? 'interactive' : 'pg',
-    limit: Math.min(Math.max(parseInt(p.get('limit') || '10', 10) || 10, 1), 50),
+    limit,
     fresh: p.get('fresh') === '1',
     seen: (p.get('seen') || '').split(',').filter(Boolean).slice(-300),
   });

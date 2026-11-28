@@ -15,6 +15,9 @@ import { applyTheme, currentTheme, openThemePicker, THEMES, applyServerDefault }
 import { mountDock, setDockVisible } from './dock.js';
 import { syncScene, sceneRoute } from './scene.js';
 import { setMood, sfx } from './sound.js';
+import { renderLangganan, tierNow, TIER_NAME, TIER_ICO, untilText, subBanner, adminSubSheet, adminPayCard, bindAdminPayCard, upgradeSheet, refreshMe } from './plan.js';
+import { renderAds, adSlot, bindAdSlots } from './ads.js';
+import { renderIntro, introCarousel, introSeen } from './intro.js';
 
 // suasana musik per halaman
 const MOOD_OF = { '': 'normal', kantor: 'normal', command: 'normal', login: 'normal', teknologi: 'normal', latihan: 'normal',
@@ -77,6 +80,8 @@ async function route() {
   try {
     switch (path) {
       case 'login': renderAuth(); break;
+      case 'langganan': await renderLangganan(app, params); break;
+      case 'iklan': if (!session.user?.admin) { location.hash = '#/'; break; } await renderAds(app); break;
       case 'latihan': renderSetup(app, params); break;
       case 'quiz': renderQuiz(app); break;
       case 'hasil': renderResult(app); break;
@@ -103,7 +108,7 @@ async function route() {
 /* ───────── Pop-up harian: muncul sekali setelah login pertama tiap hari ───────── */
 let dailyBusy = false;
 async function maybeDaily() {
-  if (dailyBusy || !session.loggedIn) return;
+  if (dailyBusy || !session.loggedIn || /^#\/(langganan|login)/.test(location.hash)) return;   // jangan ganggu saat kembali dari pembayaran
   const today = new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10);
   const key = 'sl_daily_' + (session.user?.uid || session.user?.email || 'u');
   try { if (localStorage.getItem(key) === today) return; } catch { return; }
@@ -155,11 +160,8 @@ function renderAuth() {
       <p class="muted" style="max-width:520px">Satu tempat untuk persiapan tes OJK, Bank Indonesia, Telkom, CPNS, BUMN, dan TKD. Pilih gaya belajarmu: ujian klasik, arena game, atau esai yang dikoreksi.</p>
       <div class="exam-badges"><span>CPNS SKD</span><span>BUMN</span><span>OJK</span><span>Bank Indonesia</span><span>Telkom</span><span>TKD</span></div>
       <div class="bank-pill" id="bankPill" hidden></div>
-      <div class="feature-list">
-        <div><i>📝</i><span><b style="color:var(--text)">3 mode latihan</b> — Pilihan Ganda, Arena Game, dan Esai dengan koreksi maksud jawaban.</span></div>
-        <div><i>📈</i><span><b style="color:var(--text)">Evaluasi harian, mingguan, bulanan</b> lengkap dengan rekomendasi belajar.</span></div>
-        <div><i>🔥</i><span><b style="color:var(--text)">4 level</b> — Easy, Normal, Hard, Prof.</span></div>
-      </div>
+      <div class="glass intro-carousel" id="introCar"></div>
+      <button type="button" class="link-btn" id="replayIntro" style="font-size:13px;margin-top:8px">▶ Putar ulang intro</button>
     </div>
     <div class="glass auth-card tilt fade-in" style="animation-delay:.1s">
       <div class="tabs" role="tablist"><button data-m="login" class="on">Masuk</button><button data-m="register">Daftar</button></div>
@@ -170,6 +172,7 @@ function renderAuth() {
           ${pwInput('fPass', 'Minimal 6 karakter', 'current-password')}</div>
         <div class="field reg" hidden><label for="fTarget">Target tes</label>
           <select id="fTarget" class="input">${TARGETS.map(t => `<option>${t}</option>`).join('')}</select></div>
+        <div class="field reg" hidden><label for="fRef">Kode referal <span class="dim">(opsional)</span></label><input id="fRef" class="input" maxlength="32" autocomplete="off" placeholder="Punya kode? Dapat trial Plus gratis"></div>
         <button class="btn block" id="authBtn" type="submit">Masuk</button>
         <p class="dim" style="text-align:center;margin:0">Belum mau daftar? <button type="button" class="link-btn" id="guestBtn">Coba sebagai tamu</button><br><small>(progres tamu tidak tersimpan)</small><br><a href="#/teknologi" class="link-btn" style="font-size:13px">⚙️ Teknologi di balik SiapLolos</a> · <button type="button" class="link-btn" id="authTheme" style="font-size:13px">🎨 Ganti tema</button></p>
       </form>
@@ -185,6 +188,10 @@ function renderAuth() {
   };
   $$('.tabs button', app).forEach(b => (b.onclick = () => setMode(b.dataset.m)));
   $('#guestBtn').onclick = () => { session.setGuest(); location.hash = '#/'; };
+  introCarousel($('#introCar'));
+  $('#replayIntro').onclick = () => renderIntro();
+  if (!introSeen()) renderIntro();
+  if (/daftar=1/.test(location.hash)) setMode('register');
   $('#authTheme').onclick = openThemePicker;
   $('#forgotBtn').onclick = () => renderForgot($('.auth-card'), $('#fEmail').value);
   bindPwToggles(app);
@@ -199,12 +206,14 @@ function renderAuth() {
     try {
       const data = await api('/auth', {
         method: 'POST',
-        body: { action: mode, name: $('#fName').value, email: $('#fEmail').value, password: $('#fPass').value, target: $('#fTarget').value },
+        body: { action: mode, name: $('#fName').value, email: $('#fEmail').value, password: $('#fPass').value, target: $('#fTarget').value, ...(mode === 'register' && $('#fRef')?.value.trim() ? { ref: $('#fRef').value.trim() } : {}) },
       });
       session.set(data.token, data.user);
-      toast(mode === 'login' ? `Selamat datang kembali, ${data.user.name}!` : 'Akun berhasil dibuat 🎉', 'ok');
+      toast(mode === 'login' ? `Selamat datang kembali, ${data.user.name}!` : data.trialStarted ? `Akun berhasil dibuat 🎉 Kode referal benar — trial ${data.user.tier === 'pro' ? 'Pro' : 'Plus'} ${data.trialStarted} hari aktif!` : 'Akun berhasil dibuat 🎉', 'ok');
       window.dispatchEvent(new Event('bg:burst'));
-      location.hash = '#/';
+      // animasi "masuk ke aplikasi"
+      $('.auth')?.classList.add('auth-enter');
+      setTimeout(() => (location.hash = '#/'), 520);
     } catch (err) {
       toast(err.message, 'err');
     } finally { btn.disabled = false; btn.textContent = label; }
@@ -317,11 +326,13 @@ async function renderHome() {
     </div>
     <div class="glass card" id="levelCard">
       ${session.loggedIn ? '<div class="skeleton" style="height:120px"></div>' : `
-        <h3 class="h2">Mode Tamu</h3><p class="muted">Daftar gratis untuk menyimpan progres, melihat evaluasi harian/mingguan/bulanan, dan masuk papan peringkat.</p>
-        <button class="btn sm" id="toLogin">Daftar / Masuk</button>`}
+        <h3 class="h2">👀 Mode Tamu</h3><p class="muted">Kamu hanya bisa melihat-lihat: latihan, simulasi, dan sebagian besar materi terkunci. Daftar gratis untuk mulai latihan, menyimpan progres, dan masuk peringkat.</p>
+        <div class="row wrap"><button class="btn sm" id="toLogin">Daftar gratis</button><a class="btn ghost sm" href="#/langganan">Lihat paket</a></div>`}
     </div>
   </section>
 
+  ${subBanner() ? `<section class="section">${subBanner()}</section>` : ''}
+  ${adSlot('home')}
   <section class="section" id="onlineBox" hidden></section>
 
   <section class="section" id="todayStats" ${session.loggedIn ? '' : 'hidden'}>
@@ -378,6 +389,7 @@ async function renderHome() {
 
   $('#toLogin')?.addEventListener('click', () => { session.clear(); location.hash = '#/login'; });
   onlineWidget($('#onlineBox'));
+  bindAdSlots();
 
   getMaterials().then(d => {
     const el = $('#matStrip'); if (!el) return;
@@ -576,10 +588,16 @@ function renderProfile() {
       <div class="row wrap" style="margin-top:6px">${u.target ? `<span class="chip">🎯 ${esc(u.target)}</span>` : ''}${u.admin ? '<span class="chip new">Admin</span>' : ''}</div>
       <div class="row wrap" style="margin-top:10px;gap:6px"><button class="btn sm" id="pfUp">📷 ${u.avatar ? 'Ganti foto' : 'Pasang foto'}</button>${u.avatar ? '<button class="btn ghost sm" id="pfDel">Hapus</button>' : ''}</div></div>
     </div>
+    <a class="glass card row tilt sub-card ${tierNow()}" href="#/langganan" style="gap:14px">
+      <span class="sub-ico">${TIER_ICO[tierNow()]}</span>
+      <div style="flex:1;min-width:0"><b>Paket ${TIER_NAME[tierNow()]}</b><div class="dim">${u.admin ? 'Admin memiliki akses penuh' : tierNow() === 'free' ? 'Upgrade ke Plus/Pro untuk latihan tanpa batas & semua simulasi' : `Aktif sampai ${untilText(u.until)}`}</div></div>
+      <span class="grad-text" style="font-weight:800">${tierNow() === 'free' ? 'Upgrade →' : u.admin ? 'Lihat →' : 'Kelola →'}</span></a>
     <div class="grid g3" id="profStats">${['Total soal', 'Akurasi', 'Total poin'].map(l => `<div class="glass stat"><div class="v">–</div><div class="l">${l}</div></div>`).join('')}</div>
     ${u.admin ? `
     <div class="glass card">
       <h2 class="h2">⚙️ Panel Admin</h2>
+      <a class="glass card row tilt" href="#/iklan" style="gap:14px;margin:12px 0 0"><span style="font-size:30px">📢</span>
+        <div style="flex:1"><b>Iklan & Promosi</b><div class="dim">Pasang banner promosi di beranda dan pantau berapa kali tampil & diklik</div></div><span class="grad-text" style="font-weight:800">Buka →</span></a>
       <a class="glass card row tilt" href="#/command" style="gap:14px;margin:12px 0"><span style="font-size:30px">🏢</span>
         <div style="flex:1"><b>Kantor Live / Command Center</b><div class="dim">Khusus admin — beri akses ke pengguna tertentu lewat Kelola akun di bawah</div></div><span class="grad-text" style="font-weight:800">Buka →</span></a>
       <p class="muted" style="margin:6px 0 12px">Buat soal & materi baru dari berita hari ini (Gemini). Keduanya juga berjalan otomatis setiap hari pukul 06.00 WIB.</p>
@@ -602,6 +620,7 @@ function renderProfile() {
       <p class="dim" style="margin:8px 0 0">💡 Jalankan satu per satu, beri jeda ±1 menit agar kuota Gemini tidak cepat habis.</p>
       <pre id="genOut" class="dim" style="white-space:pre-wrap;margin:12px 0 0"></pre><div id="genLinks"></div>
     </div>
+    ${adminPayCard()}
     <div class="glass card" id="accCard">
       <div class="row between wrap" style="gap:10px"><h2 class="h2" style="margin:0">👥 Kelola akun</h2><span class="chip" id="accTotal">…</span></div>
       <p class="muted" style="margin:6px 0 10px">Daftar semua akun terdaftar. Admin bisa mengganti kata sandi akun mana pun tanpa kode email, menghapus akun beserta riwayat latihan & peringkatnya, atau memberi/mencabut akses 🏢 Kantor Live.</p>
@@ -618,7 +637,7 @@ function renderProfile() {
       <div class="row between wrap" style="gap:10px"><h2 class="h2" style="margin:0">🤖 Mentor AI di materi</h2>
         <label class="row" style="gap:8px;cursor:pointer"><input type="checkbox" class="switch" id="tutorOn"><b id="tutorOnTxt">…</b></label></div>
       <p class="muted" style="margin:6px 0 10px">Mentor AI memakai kuota Gemini yang sama dengan generate. Matikan bila kuota sedang menipis. Jawaban untuk 4 pertanyaan saran disimpan dan dipakai ulang untuk semua pengguna, jadi tidak memakai kuota lagi dan tidak mengurangi jatah harian.</p>
-      <div class="dim psi-lbl">Batas pertanyaan per pengguna per hari</div>
+      <div class="dim psi-lbl">Batas pertanyaan paket Plus per hari (Free: 3 · Pro: 3× Plus, min. 60)</div>
       <div class="pill-group" id="tutorDaily">${[5, 10, 20, 40, 60].map(n => `<button class="pill" data-td="${n}">${n}</button>`).join('')}</div>
       <div class="dim" id="tutorInfo" style="margin-top:8px"></div>
     </div>
@@ -689,12 +708,13 @@ function renderProfile() {
     loadFb();
     // ── Tema default ──
     const paintDef = k => { $$('#defTheme [data-dt]').forEach(b => b.classList.toggle('on', b.dataset.dt === k)); const t = THEMES.find(x => x.key === k); $('#defThemeInfo').textContent = t ? `Default saat ini: ${t.ico} ${t.name}` : ''; };
-    getInfo(true).then(d => paintDef(d?.settings?.defaultTheme || 'dark')).catch(() => {});
+    getInfo(true).then(d => paintDef(d?.settings?.defaultTheme || 'senja')).catch(() => {});
     $$('#defTheme [data-dt]').forEach(b => (b.onclick = async () => {
       const k = b.dataset.dt; b.disabled = true;
       try { await api('/presence?op=settings', { method: 'POST', body: { defaultTheme: k } }); paintDef(k); applyServerDefault(k); toast('Tema default disimpan untuk semua pengguna', 'ok'); }
       catch (e) { toast(e.message, 'err'); } finally { b.disabled = false; }
     }));
+    bindAdminPayCard();
     // ── Kelola akun ──
     let accAll = [];
     const fmtD = ms => ms ? new Date(ms).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
@@ -705,16 +725,17 @@ function renderProfile() {
       $('#accList').innerHTML = list.length ? list.map(u => `
         <div class="acc-row">
           ${avatar(u, 'md')}
-          <div class="acc-main"><b>${esc(u.name)}${u.me ? ' <span class="chip sm">kamu</span>' : ''}${u.admin ? ' <span class="chip sm acc-adm">admin</span>' : ''}${u.online ? ' <span class="acc-on" title="Sedang online"></span>' : ''}</b>
+          <div class="acc-main"><b>${esc(u.name)}${u.me ? ' <span class="chip sm">kamu</span>' : ''}${u.admin ? ' <span class="chip sm acc-adm">admin</span>' : ''} <span class="chip sm tier-chip ${u.sub?.tier || 'free'}">${TIER_ICO[u.sub?.tier || 'free']} ${TIER_NAME[u.sub?.tier || 'free']}${u.sub?.until ? ' · s.d. ' + fmtD(u.sub.until) : ''}</span>${u.online ? ' <span class="acc-on" title="Sedang online"></span>' : ''}</b>
             <span class="dim">${esc(u.email)}${u.target ? ' · 🎯 ' + esc(u.target) : ''}</span>
             <span class="dim acc-meta">Daftar ${fmtD(u.createdAt)} · Login terakhir ${fmtD(u.lastLogin)} · ${u.loginCount || 0}× login</span></div>
-          <div class="acc-act"><button class="btn ghost sm" data-pw="${esc(u.email)}">🔑 Ganti sandi</button>
+          <div class="acc-act">${u.admin ? '' : `<button class="btn ghost sm" data-sub="${esc(u.email)}">💎 Langganan</button>`}<button class="btn ghost sm" data-pw="${esc(u.email)}">🔑 Ganti sandi</button>
             ${u.admin ? '' : `<button class="btn ghost sm acc-kan${u.kantor ? ' on' : ''}" data-kan="${esc(u.email)}" title="${u.kantor ? 'Cabut akses Kantor Live' : 'Beri akses Kantor Live'}">🏢 ${u.kantor ? 'Cabut Kantor' : 'Beri Kantor'}</button>`}
             ${u.me || u.admin ? '' : `<button class="btn ghost sm acc-del" data-del="${esc(u.email)}">🗑️ Hapus</button>`}</div>
         </div>`).join('') : `<div class="empty">${q ? 'Tidak ada akun yang cocok.' : 'Belum ada akun.'}</div>`;
       $$('#accList [data-pw]').forEach(b => (b.onclick = () => accPassword(accAll.find(u => u.email === b.dataset.pw))));
       $$('#accList [data-del]').forEach(b => (b.onclick = () => accDelete(accAll.find(u => u.email === b.dataset.del))));
       $$('#accList [data-kan]').forEach(b => (b.onclick = () => accKantor(accAll.find(u => u.email === b.dataset.kan), b)));
+      $$('#accList [data-sub]').forEach(b => (b.onclick = () => adminSubSheet(accAll.find(u => u.email === b.dataset.sub), paintAcc)));
     };
     async function accKantor(u, b) {
       if (!u) return;
@@ -869,8 +890,21 @@ function renderProfile() {
   }
 }
 
+// kembali dari halaman bayar Midtrans → arahkan ke halaman langganan dengan status yang sesuai
+(() => {
+  const q = new URLSearchParams(location.search);
+  if (!q.get('midtrans')) return;
+  const ts = q.get('transaction_status') || '';
+  const st = ts === 'settlement' || ts === 'capture' ? 'sukses' : ts === 'pending' ? 'pending' : ts ? 'gagal' : 'pending';
+  history.replaceState(null, '', `/#/langganan?bayar=${st}`);
+})();
 window.addEventListener('hashchange', route);
 // akses Kantor berubah (diberi/dicabut admin) → perbarui menu tanpa memuat ulang
+// paket langganan berubah (dibayar / diberi admin / kedaluwarsa) → muat ulang halaman yang bergantung pada paket
+window.addEventListener('tier:change', () => {
+  const path = location.hash.replace(/^#\/?/, '').split('?')[0];
+  if (['', 'latihan', 'profil', 'materi', 'evaluasi', 'psikotes'].includes(path)) route();
+});
 window.addEventListener('kantor:change', () => {
   const path = location.hash.replace(/^#\/?/, '').split('?')[0];
   if (!$('#topbar').hidden) chrome(true, path);

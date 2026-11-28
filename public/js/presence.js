@@ -21,6 +21,7 @@ async function beat(force = false) {
   try {
     const d = await api('/presence', { method: 'POST', body: { page: pageNow(), duel: presence.duelCode, since, hidden: isHidden() } });
     Object.assign(presence, { count: d.count, users: d.users, ready: true });
+    if (d.tier) import('./plan.js').then(m => { m.syncTier(d.tier, d.until, d.trial); m.notifyAdminPay(d.lastPay); }).catch(() => {});
     if (typeof d.kantor === 'boolean' && !!session.user?.kantor !== d.kantor) { session.patch({ kantor: d.kantor }); window.dispatchEvent(new Event('kantor:change')); }
     window.dispatchEvent(new Event('presence:update'));
   } catch {}

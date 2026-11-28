@@ -2,7 +2,8 @@
 // GET /api/materials?id=xxx    → isi lengkap satu materi
 // DELETE /api/materials?id=xxx → hapus materi harian (khusus admin)
 import { handle, query, send, httpError } from './_lib/http.js';
-import { requireUser, isAdmin } from './_lib/auth.js';
+import { requireUser, isAdmin, getUser } from './_lib/auth.js';
+import { tierOf, LIMITS } from './_lib/plan.js';
 import { getDB, dataVersion } from './_lib/db.js';
 import { CORE_MATERIALS } from './_lib/seed-materials.js';
 import { enrichMaterial } from './_lib/ogimage.js';
@@ -30,10 +31,23 @@ export default handle(['GET', 'DELETE'], async (req, res) => {
   if (id) {
     const m = CORE_MATERIALS.find(x => x.id === id) || (await db.getMaterial(id).catch(() => null));
     if (!m) throw httpError(404, 'Materi tidak ditemukan');
+    // Akses sesuai paket: Tamu hanya pratinjau; Free: semua materi inti + 3 materi harian terbaru
+    const t = await tierOf(db, getUser(req));
+    res.setHeader('Cache-Control', 'private, no-store');
+    const preview = why => send(res, 200, { material: {
+      id: m.id, core: !!m.core, category: m.category, title: m.title, summary: m.summary, readMin: m.readMin, cover: m.cover || null,
+      createdAt: m.createdAt || null, updatedAt: m.updatedAt || null, basis: m.basis, keyPoints: (m.keyPoints || []).slice(0, 2),
+      sections: (m.sections || []).map(x => ({ heading: x.heading, body: '' })), locked: why,
+    } });
+    if (t.tier === 'guest') return preview('login');
+    if (!m.core && LIMITS[t.tier].dailyMaterials < 1e9) {
+      const daily = listCache.daily || (await db.listMaterials(10).catch(() => []));
+      const newest = daily.filter(x => !x.core).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).slice(0, LIMITS[t.tier].dailyMaterials).map(x => x.id);
+      if (!newest.includes(m.id)) return preview('plus');
+    }
     // cari foto dari artikel sumber (sekali saja, lalu disimpan)
     const add = await enrichMaterial(m, 8000).catch(e => { console.error('enrich', e.message); return null; });
     if (add) { Object.assign(m, add); db.updateMaterial(m.id, add).catch(() => {}); }
-    res.setHeader('Cache-Control', add ? 'no-store' : 'public, s-maxage=600');
     return send(res, 200, { material: m });
   }
   let daily = [];

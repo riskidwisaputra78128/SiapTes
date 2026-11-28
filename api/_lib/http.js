@@ -64,7 +64,7 @@ export function handle(methods, fn) {
     } catch (e) {
       if (isQuotaErr(e)) { markQuota(); return send(res, 503, { error: 'Server sedang penuh (kuota harian database habis). Ini bukan error — coba lagi setelah kuota reset.', serverBusy: true }); }
       if (!e.expose) console.error(e);
-      send(res, e.status || 500, { error: e.expose ? e.message : 'Terjadi kesalahan server. Coba lagi.' });
+      send(res, e.status || 500, { error: e.expose ? e.message : 'Terjadi kesalahan server. Coba lagi.', ...(e.expose && e.extra ? e.extra : {}) });
     }
   };
 }

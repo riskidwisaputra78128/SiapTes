@@ -63,13 +63,13 @@ export async function revokeSessions(db, uid) {
 // Akses Kantor Live: admin selalu boleh; pengguna lain hanya jika diberi akses admin (meta 'kantorAccess')
 let kantorCache = { at: 0, map: {} };
 export async function kantorMap(db, fresh = false) {
-  if (fresh || Date.now() - kantorCache.at > 30000) kantorCache = { at: Date.now(), map: (await db.getMeta('kantorAccess').catch(() => null)) || {} };
+  if (fresh || Date.now() - kantorCache.at > 10000) kantorCache = { at: Date.now(), map: (await db.getMeta('kantorAccess').catch(() => null)) || {} };
   return kantorCache.map;
 }
-export async function canKantor(db, u) {
+export async function canKantor(db, u, fresh = false) {
   if (!u) return false;
   if (isAdmin(u)) return true;
-  return !!(await kantorMap(db))[uidKey(u.uid)];
+  return !!(await kantorMap(db, fresh))[uidKey(u.uid)];
 }
 export async function setKantorAccess(db, uid, on) {
   await db.setMetaField('kantorAccess', uidKey(uid), on ? Date.now() : null);

@@ -4,11 +4,12 @@
 // POST /api/duel { action: 'create' | 'join' | 'leave' | 'start' | 'answer' | 'power', ... }
 import crypto from 'node:crypto';
 import { handle, readBody, query, send, httpError } from './_lib/http.js';
-import { requireUser } from './_lib/auth.js';
+import { requireUser, getUser } from './_lib/auth.js';
 import { getDB } from './_lib/db.js';
 import { avatarMap, avatarUrl } from './_lib/avatar.js';
 import { pickQuestions, DIFFS } from './_lib/pick.js';
 import { keywordGrade } from './_lib/keyword-grade.js';
+import { guardDuel } from './_lib/plan.js';
 
 const CATS = ['campuran', 'twk', 'tiu', 'tkp', 'ojk', 'bi', 'bumn', 'telkom', 'keuangan', 'english', 'isu', 'psikologi'];
 const MODES = {
@@ -213,7 +214,9 @@ function leaveRoom(r, uid) {
 }
 
 export default handle(['GET', 'POST'], async (req, res) => {
-  const user = requireUser(req);
+  // Tamu (belum daftar) boleh melihat daftar room & menonton duel, tetapi tidak bisa membuat/gabung
+  const guestId = 'tamu-' + crypto.createHash('sha1').update(String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'x')).digest('hex').slice(0, 10);
+  const user = req.method === 'GET' ? (getUser(req) || { uid: guestId, name: 'Tamu', guest: true }) : requireUser(req);
   const db = await getDB();
   const now = Date.now();
 
@@ -262,6 +265,7 @@ export default handle(['GET', 'POST'], async (req, res) => {
   const me = { name: cleanName(user.name), joinedAt: now, score: 0, correct: 0, answers: {} };
 
   if (action === 'create') {
+    await guardDuel(db, user);   // Free: maks 3 room/hari
     const mode = MODES[b.mode] ? b.mode : 'pg';
     const M = MODES[mode];
     const psiType = mode === 'psikotes' ? (b.psiType === 'cermat' ? 'cermat' : 'kraepelin') : null;

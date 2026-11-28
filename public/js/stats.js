@@ -1,6 +1,7 @@
 import { api, session, cachedApi } from './api.js';
 import { $, $$, esc, fmt, countUp, timeAgo, avatar } from './ui.js';
 import { catByKey, modeByKey, diffByKey } from './data.js';
+import { limits } from './plan.js';
 
 let chartLib;
 function loadChart() {
@@ -54,7 +55,8 @@ export async function renderStats(app) {
       <p class="dim" style="margin:8px 0 0">Batang = jumlah soal · Garis = akurasi (%)</p>
     </div>
 
-    <div class="grid md-g2">
+    <div class="grid md-g2 ${limits().evalDetail ? '' : 'eval-locked'}">
+      ${limits().evalDetail ? '' : `<a class="glass eval-gate" href="#/langganan?need=plus&why=${encodeURIComponent('Evaluasi detail per materi, level, dan mode tersedia mulai paket Plus.')}"><span class="gate-ico sm">⭐</span><b>Evaluasi detail tersedia di paket Plus</b><span class="dim">Akurasi per materi, per level, per mode & rekomendasi belajar</span><span class="btn sm">Upgrade</span></a>`}
       <div class="glass card">
         <h2 class="h2" style="margin-bottom:14px">Akurasi per materi</h2>
         ${s.byCategory.length ? s.byCategory.map(c => `

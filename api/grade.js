@@ -6,6 +6,7 @@ import { aiEnabled, geminiJSON } from './_lib/ai.js';
 import { getDB } from './_lib/db.js';
 import { CORE_MATERIALS } from './_lib/seed-materials.js';
 import { keywordGrade } from './_lib/keyword-grade.js';
+import { tierOf, LIMITS } from './_lib/plan.js';
 
 // ───── AI pendamping materi ─────
 import crypto from 'node:crypto';
@@ -55,6 +56,9 @@ async function tutor(req, res, b) {
   const db = await getDB();
   const cfg = await tutorSettings(db);
   if (!cfg.enabled) throw httpError(403, 'Mentor AI sedang dinonaktifkan oleh admin.');
+  // batas harian sesuai paket: Free 3 · Plus = batas yang diatur admin (bawaan 20) · Pro = 3× Plus (min. 60)
+  const t = await tierOf(db, user);
+  cfg.daily = t.tier === 'free' ? LIMITS.free.tutor : t.tier === 'plus' ? cfg.daily : Math.max(LIMITS.pro.tutor, cfg.daily * 3);
   if (!aiEnabled()) throw httpError(400, 'AI belum aktif (GEMINI_API_KEY belum diatur).');
   const message = String(b.message || '').trim().slice(0, 600);
   if (message.length < 2) throw httpError(400, 'Tulis pertanyaanmu dulu.');

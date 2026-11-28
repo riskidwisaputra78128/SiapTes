@@ -141,7 +141,9 @@ CORE_MATERIALS.push(...EXTRA_MATERIALS);
 // materi CPNS sesuai Kepmen PANRB 674/2026 (kisi-kisi SKD & nilai ambang batas) → total 33
 CORE_MATERIALS.push(...SKD2026_MATERIALS);
 // semua materi inti dilengkapi paket interaktif: angka penting, alur, kuis, dan Benar/Salah (tidak menimpa yang sudah ada)
+const CORE_UPDATED = Date.UTC(2026, 10, 27, 13, 0);   // 27 Nov 2026 20.00 WIB — pembaruan materi inti terakhir
 for (const m of CORE_MATERIALS) {
+  if (!m.updatedAt) m.updatedAt = CORE_UPDATED;
   const pack = INTERACTIVE_PACK[m.id] || {};
   for (const k of ['stats', 'flow', 'quiz', 'tf']) if (!m[k]?.length && pack[k]?.length) m[k] = pack[k];
 }

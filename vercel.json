@@ -36,5 +36,15 @@
         }
       ]
     }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/midtrans-webhook",
+      "destination": "/api/auth?hook=midtrans"
+    },
+    {
+      "source": "/api/xendit-webhook",
+      "destination": "/api/auth?hook=xendit"
+    }
   ]
 }

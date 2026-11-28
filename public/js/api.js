@@ -38,7 +38,7 @@ export async function api(path, { method = 'GET', body } = {}) {
     session.clear();
     window.dispatchEvent(new Event('auth:expired'));
   }
-  if (!r.ok) throw Object.assign(new Error(data.error || `Gagal memuat (${r.status})`), { status: r.status });
+  if (!r.ok) throw Object.assign(new Error(data.error || `Gagal memuat (${r.status})`), { status: r.status, data });
   if (method !== 'GET' && /^\/(attempt|duel|auth)/.test(path)) dropCache();   // ada hasil latihan/duel baru → statistik & peringkat dimuat ulang
   return data;
 }

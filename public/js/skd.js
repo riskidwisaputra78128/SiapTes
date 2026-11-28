@@ -8,6 +8,7 @@
 import { api } from './api.js';
 import { $, $$, esc, toast, sheet, icons, mmss, vibrate, ring, animateRings, countUp, confetti } from './ui.js';
 import { sfx } from './sound.js';
+import { handleGate } from './plan.js';
 
 const L = ['A', 'B', 'C', 'D', 'E'];
 
@@ -134,7 +135,7 @@ export function openSimIntro(key, { seenKeys, rememberSeen, practice }) {
         close();
         window.dispatchEvent(new Event('bg:burst'));
         location.hash = '#/quiz';
-      } catch (e) { toast(e.message, 'err'); b.disabled = false; b.textContent = 'Mulai simulasi ▶'; }
+      } catch (e) { b.disabled = false; b.textContent = 'Mulai simulasi ▶'; if (handleGate(e)) close(); else toast(e.message, 'err'); }
     };
   });
 }

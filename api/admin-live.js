@@ -12,7 +12,7 @@ const key = uid => crypto.createHash('sha1').update(String(uid)).digest('hex').s
 export default handle(['GET'], async (req, res) => {
   const me = requireUser(req);
   const db = await getDB();
-  if (!(await canKantor(db, me))) throw httpError(403, 'Kantor Live khusus admin. Minta admin untuk memberi akses.');
+  if (!(await canKantor(db, me, true))) throw httpError(403, 'Kantor Live khusus admin. Minta admin untuk memberi akses.');
   const now = Date.now(), day0 = startOfDayWIB(now);
 
   const [presence, rooms, attempts, genStatus, lastGenerate, materials, generated] = await Promise.all([
