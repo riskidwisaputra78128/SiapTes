@@ -1726,3 +1726,8 @@ body.intro-open { overflow: hidden; }
 #ttBox{min-width:0;overflow:hidden}
 #ttBox > .row{flex-wrap:wrap}
 @media (max-width:560px){.tt-row{grid-template-columns:minmax(0,1fr) auto}.tt-from{gap:4px;font-size:12px}.tt-from .input{width:54px;padding:7px 8px}}
+/* ── Upload gambar iklan ── */
+.ad-img-pick{display:grid;gap:8px}
+.ad-img-prev{aspect-ratio:3/1;border-radius:14px;overflow:hidden;background:rgba(255,255,255,.05);border:1px dashed rgba(255,255,255,.2);display:grid;place-items:center}
+.ad-img-prev img{width:100%;height:100%;object-fit:cover;display:block}
+.ad-img-prev span{font-size:12.5px;opacity:.6}

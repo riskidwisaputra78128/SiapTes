@@ -85,13 +85,38 @@ export async function renderAds(app) {
   load();
 }
 
+// kecilkan gambar di browser: lebar maks. 1200px, WebP (fallback JPEG) — hemat kuota & cepat tampil
+async function shrink(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const im = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = url; });
+    const scale = Math.min(1, 1200 / im.naturalWidth);
+    const c = document.createElement('canvas');
+    c.width = Math.round(im.naturalWidth * scale); c.height = Math.round(im.naturalHeight * scale);
+    c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+    for (const q of [0.82, 0.7, 0.55, 0.4]) {
+      let d = c.toDataURL('image/webp', q);
+      if (!d.startsWith('data:image/webp')) d = c.toDataURL('image/jpeg', q);
+      if (d.length < 850000) return d;
+    }
+    throw new Error('besar');
+  } finally { URL.revokeObjectURL(url); }
+}
+
 function editAd(a, onDone) {
   const t = new Set(a?.tiers || ['guest', 'free', 'plus']);
   sheet(`<h3 class="h2">${a ? '✏️ Ubah iklan' : '＋ Iklan baru'}</h3>
     <div class="field"><label>Judul</label><input class="input" id="aTitle" maxlength="80" placeholder="Contoh: Diskon bimbel CPNS 50%" value="${esc(a?.title || '')}"></div>
     <div class="field"><label>Deskripsi singkat (opsional)</label><input class="input" id="aText" maxlength="200" placeholder="Kalimat ajakan singkat" value="${esc(a?.text || '')}"></div>
     <div class="field"><label>Link promosi (https://…)</label><input class="input" id="aLink" type="url" placeholder="https://contoh.com/promo" value="${esc(a?.link || '')}"></div>
-    <div class="field"><label>Link gambar banner (opsional, https://…)</label><input class="input" id="aImg" type="url" placeholder="https://…/banner.jpg" value="${esc(a?.img || '')}"></div>
+    <div class="field"><label>Gambar banner (opsional)</label>
+      <div class="ad-img-pick">
+        <div class="ad-img-prev" id="aPrev">${a?.img ? `<img src="${esc(a.img)}" alt="">` : '<span>Belum ada gambar</span>'}</div>
+        <div class="row wrap" style="gap:8px"><label class="btn sm ghost" style="cursor:pointer">📤 Upload gambar<input type="file" id="aFile" accept="image/jpeg,image/png,image/webp" hidden></label>
+          <button type="button" class="btn sm ghost" id="aImgClear" ${a?.img ? '' : 'hidden'}>🗑️ Hapus gambar</button></div>
+        <input class="input" id="aImg" type="url" placeholder="…atau tempel link gambar https://…/banner.jpg" value="${esc(a?.img && !a.img.startsWith('/api/') ? a.img : '')}">
+        <small class="dim" id="aImgInfo">JPG/PNG/WebP. Otomatis dikecilkan (lebar maks. 1200px). Rasio ideal 3:1, mis. 1200×400.</small>
+      </div></div>
     <div class="field"><label>Teks tombol</label><input class="input" id="aCta" maxlength="24" value="${esc(a?.cta || 'Lihat promo')}"></div>
     <div class="row wrap" style="gap:10px"><div class="field" style="flex:1"><label>Mulai tayang</label><input class="input" id="aStart" type="date" value="${toInput(a?.start)}"></div>
       <div class="field" style="flex:1"><label>Selesai tayang</label><input class="input" id="aEnd" type="date" value="${toInput(a?.end)}"></div></div>
@@ -100,10 +125,21 @@ function editAd(a, onDone) {
     <button class="btn block" id="aSave">Simpan iklan</button>`,
   (el, close) => {
     $$('#aTiers button', el).forEach(b => (b.onclick = () => { t.has(b.dataset.v) ? t.delete(b.dataset.v) : t.add(b.dataset.v); b.classList.toggle('on'); }));
+    // gambar: imgData = hasil upload baru; keep = URL gambar upload lama (dipakai bila tidak diganti)
+    let imgData = '', keep = a?.img && a.img.startsWith('/api/') ? a.img : '';
+    const prev = src => { $('#aPrev', el).innerHTML = src ? `<img src="${esc(src)}" alt="">` : '<span>Belum ada gambar</span>'; $('#aImgClear', el).hidden = !src; };
+    $('#aFile', el).onchange = async e => {
+      const f = e.target.files?.[0]; if (!f) return;
+      if (f.size > 15 * 1024 * 1024) return toast('File terlalu besar (maks. 15 MB)', 'err');
+      try { imgData = await shrink(f); keep = ''; $('#aImg', el).value = ''; prev(imgData); $('#aImgInfo', el).textContent = `✅ Siap di-upload (${Math.round(imgData.length * 0.75 / 1024)} KB setelah dikompres)`; }
+      catch { toast('Gambar tidak bisa dibaca', 'err'); }
+    };
+    $('#aImg', el).oninput = () => { const v = $('#aImg', el).value.trim(); if (v) { imgData = ''; keep = ''; } prev(v || imgData || keep); };
+    $('#aImgClear', el).onclick = () => { imgData = ''; keep = ''; $('#aImg', el).value = ''; $('#aFile', el).value = ''; prev(''); };
     $('#aSave', el).onclick = async () => {
       const btn = $('#aSave', el); btn.disabled = true;
       try {
-        await api('/presence?op=ads', { method: 'POST', body: { action: 'save', id: a?.id, active: a ? a.active : true, title: $('#aTitle', el).value, text: $('#aText', el).value, link: $('#aLink', el).value, img: $('#aImg', el).value, cta: $('#aCta', el).value, start: fromInput($('#aStart', el).value), end: fromInput($('#aEnd', el).value, true), tiers: [...t] } });
+        await api('/presence?op=ads', { method: 'POST', body: { action: 'save', id: a?.id, active: a ? a.active : true, title: $('#aTitle', el).value, text: $('#aText', el).value, link: $('#aLink', el).value, img: $('#aImg', el).value.trim() || keep, imgData, cta: $('#aCta', el).value, start: fromInput($('#aStart', el).value), end: fromInput($('#aEnd', el).value, true), tiers: [...t] } });
         close(); toast('Iklan disimpan — tampil di beranda dalam ±1 menit', 'ok'); onDone?.();
       } catch (e) { toast(e.message, 'err'); btn.disabled = false; }
     };
