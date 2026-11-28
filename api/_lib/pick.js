@@ -1,6 +1,7 @@
 // Pemilihan soal bersama (dipakai /api/questions dan /api/duel)
 import { getDB, dataVersion } from './db.js';
 import { SEED_QUESTIONS } from './seed.js';
+import { fixesFor, applyFix, isTell } from './disguise.js';
 
 export const DIFFS = ['easy', 'normal', 'hard', 'prof'];
 
@@ -44,21 +45,38 @@ async function cachedQuestions(category) {
   catch (e) { if (hit?.list) return hit.list; throw e; }   // Firestore gagal → pakai salinan lama bila ada
 }
 
+/** Semua soal satu kategori (bank bawaan + soal AI), tanpa duplikat — dipakai juga oleh fitur Samarkan opsi. */
+export async function listAll(cat) {
+  let dbQs = [];
+  try { dbQs = await cachedQuestions(cat); } catch {}
+  const uniq = new Set();
+  return [...dbQs, ...SEED_QUESTIONS].filter(q => q.category === cat && (uniq.has(q.id) ? false : uniq.add(q.id)));
+}
+
 export async function pickQuestions({ category = 'campuran', difficulty = 'all', type = 'pg', limit = 10, fresh = false, seen = [], only = null }) {
   let dbQs = [];
   try { dbQs = await cachedQuestions(category); } catch (e) { console.error('listQuestions', e.message); }
   const uniq = new Set();
-  const pool = [...dbQs, ...SEED_QUESTIONS]
+  let pool = [...dbQs, ...SEED_QUESTIONS]
     .filter(q => q.type === type && (category === 'campuran' || q.category === category) && (!only || only(q)))
     .filter(q => (uniq.has(q.id) ? false : uniq.add(q.id)));
+  // opsi pengecoh yang sudah disamarkan (tulis ulang AI) menimpa opsi lama
+  if (type === 'pg') {
+    const db = await getDB().catch(() => null);
+    const cats = [...new Set(pool.map(q => q.category))];
+    const maps = db ? Object.fromEntries(await Promise.all(cats.map(async c => [c, await fixesFor(db, c).catch(() => ({}))]))) : {};
+    for (let i = 0; i < pool.length; i++) pool[i] = applyFix(pool[i], maps[pool[i].category]);
+  }
+  // soal yang jawabannya masih ketahuan dari panjang kalimat → dipakai paling akhir
+  const fair = list => [...shuffle(list.filter(q => !isTell(q))), ...shuffle(list.filter(q => isTell(q)))];
   // urutan "sudah dilihat": makin akhir di daftar = makin baru dilihat
   const seenRank = new Map(seen.map((k, i) => [k, i]));
   const order = list => {
     const unseen = list.filter(q => !seenRank.has(qkey(q.id)));
     const old = list.filter(q => seenRank.has(qkey(q.id))).sort((a, b) => seenRank.get(qkey(a.id)) - seenRank.get(qkey(b.id)));
     const head = fresh
-      ? [...shuffle(unseen.filter(q => q.source)).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)), ...shuffle(unseen.filter(q => !q.source))]
-      : shuffle(unseen);
+      ? [...shuffle(unseen.filter(q => q.source)).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)), ...fair(unseen.filter(q => !q.source))]
+      : fair(unseen);
     return [...head, ...old];                                // yang sudah dilihat paling lama → dipakai lebih dulu
   };
   const exact = difficulty === 'all' ? pool : pool.filter(q => q.difficulty === difficulty);
@@ -96,18 +114,27 @@ export async function pickQuestions({ category = 'campuran', difficulty = 'all',
 // ojk    : pola seleksi PCAM OJK — Tes Potensi Dasar + Tes Kemampuan Umum (jasa keuangan, bahasa Inggris, isu)
 // telkom : pola tes online Telkom / Rekrutmen Bersama BUMN — TKD, AKHLAK, TWK, bidang, bahasa Inggris
 const scored = q => Array.isArray(q.scores) && q.scores.length === q.options.length;
+// ix: jumlah soal INTERAKTIF (urutkan, cocokkan, isi rumpang, benar/salah, dst.) di bagian itu — seperti tes online
+// BI/OJK/BUMN masa kini. Total soal per bagian tetap; sisanya pilihan ganda. CPNS (SKD) tetap pilihan ganda penuh.
 export const SIM_PLANS = {
   skd: [{ key: 'twk', cats: [['twk', 30]] }, { key: 'tiu', cats: [['tiu', 35]] }, { key: 'tkp', cats: [['tkp', 45]], only: scored }],
-  bi: [{ key: 'tpd', cats: [['tiu', 30]] }, { key: 'bank', cats: [['bi', 25]] }, { key: 'umum', cats: [['isu', 8], ['keuangan', 7]] }, { key: 'eng', cats: [['english', 20]] }],
-  ojk: [{ key: 'tpd', cats: [['tiu', 30]] }, { key: 'sjk', cats: [['ojk', 20], ['keuangan', 10]] }, { key: 'eng', cats: [['english', 15]] }, { key: 'isu', cats: [['isu', 10]] }],
-  telkom: [{ key: 'tkd', cats: [['tiu', 40]] }, { key: 'akhlak', cats: [['bumn', 30]] }, { key: 'twk', cats: [['twk', 10]] }, { key: 'bidang', cats: [['telkom', 20]] }, { key: 'eng', cats: [['english', 10]] }],
+  bi: [{ key: 'tpd', cats: [['tiu', 30]], ix: 4 }, { key: 'bank', cats: [['bi', 25]], ix: 4 }, { key: 'umum', cats: [['isu', 8], ['keuangan', 7]], ix: 2 }, { key: 'eng', cats: [['english', 20]], ix: 3 }],
+  ojk: [{ key: 'tpd', cats: [['tiu', 30]], ix: 4 }, { key: 'sjk', cats: [['ojk', 20], ['keuangan', 10]], ix: 5 }, { key: 'eng', cats: [['english', 15]], ix: 2 }, { key: 'isu', cats: [['isu', 10]], ix: 2 }],
+  telkom: [{ key: 'tkd', cats: [['tiu', 40]], ix: 5 }, { key: 'akhlak', cats: [['bumn', 30]], ix: 4 }, { key: 'twk', cats: [['twk', 10]], ix: 1 }, { key: 'bidang', cats: [['telkom', 20]], ix: 3 }, { key: 'eng', cats: [['english', 10]], ix: 2 }],
 };
 export async function pickSim(exam, seen = []) {
   const plan = SIM_PLANS[exam];
   if (!plan) return null;
   const parts = await Promise.all(plan.map(async p => {
-    const lists = await Promise.all(p.cats.map(([category, n]) => pickQuestions({ category, difficulty: 'all', type: 'pg', limit: n, seen, only: p.only || null })));
-    return shuffle(lists.flatMap(r => r.questions)).map(q => ({ ...q, section: p.key }));
+    const total = p.cats.reduce((a, [, n]) => a + n, 0);
+    const lists = await Promise.all(p.cats.map(async ([category, n]) => {
+      // bagi kuota interaktif sebanding jumlah soal tiap kategori di bagian ini
+      const want = p.ix ? Math.round((p.ix * n) / total) : 0;
+      const ix = want ? (await pickQuestions({ category, difficulty: 'all', type: 'interactive', limit: want, seen })).questions : [];
+      const pg = await pickQuestions({ category, difficulty: 'all', type: 'pg', limit: n - ix.length, seen, only: p.only || null });
+      return [...pg.questions, ...ix];
+    }));
+    return shuffle(lists.flat()).map(q => ({ ...q, section: p.key }));
   }));
   return { exam, questions: parts.flat() };
 }

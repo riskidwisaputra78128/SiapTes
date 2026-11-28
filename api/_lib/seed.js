@@ -1,3 +1,4 @@
+import { applyStaticFixes } from './bank/fixes.js';
 import { SEED_INTERACTIVE } from './seed-interactive.js';
 import { BANK } from './bank/index.js';
 // Bank soal awal (materi stabil). Soal berbasis berita terbaru ditambahkan otomatis oleh /api/generate.
@@ -231,3 +232,5 @@ export const SEED_QUESTIONS = [
 SEED_QUESTIONS.push(...SEED_INTERACTIVE);
 // bank soal bawaan ±100 soal/kategori (offline, tetap tersedia walau Firebase/AI tidak bisa diakses)
 SEED_QUESTIONS.push(...BANK);
+// opsi pengecoh soal inti yang sudah disamarkan (panjang setara jawaban benar)
+applyStaticFixes(SEED_QUESTIONS);

@@ -9,6 +9,9 @@ import { aiEnabled, geminiJSON } from './_lib/ai.js';
 import { NEWS_TOPICS, fetchHeadlines, fetchBackup } from './_lib/news.js';
 import { dayKey } from './_lib/http.js';
 import { KNOW, KNOW_CATS, pickSubs } from './_lib/curriculum.js';
+import { SEED_QUESTIONS } from './_lib/seed.js';
+import { listAll } from './_lib/pick.js';
+import { runDisguise, disguiseStatus } from './_lib/disguise.js';
 
 const CAT_LABEL = {
   bi: 'Bank Indonesia, kebijakan moneter & sistem pembayaran',
@@ -191,7 +194,7 @@ Buat 10 soal: 8 pilihan ganda (type "pg") dan 2 soal interaktif (type "interacti
 Aturan:
 - ${K.rule}
 - Sebar tingkat kesulitan: easy, normal, hard, prof.
-- Pilihan ganda: tepat 4 opsi tanpa huruf di depan, satu jawaban benar, pengecoh masuk akal, JANGAN pakai "semua benar"/"semua salah".
+- Pilihan ganda: tepat 4 opsi tanpa huruf di depan, satu jawaban benar, pengecoh masuk akal, JANGAN pakai "semua benar"/"semua salah". Panjang ke-4 opsi HARUS setara (selisih maks. ±15% karakter) dengan gaya kalimat serupa — jawaban benar TIDAK BOLEH menjadi opsi paling panjang/paling lengkap sendiri, dan pengecoh sama rincinya.
 - "explanation": 1-3 kalimat (sebut dasar hukum/konsep/rumusnya).
 ${ix.map(k => IX_SPEC[k]).join('\n')}
 Format JSON:
@@ -286,7 +289,7 @@ Aturan:
 - Kalimat soal harus BERDIRI SENDIRI: jangan menulis "menurut berita", "berdasarkan artikel", "dalam berita tersebut", nama media, atau tanggal berita. Konteks berita boleh disebut di "explanation".
 - Jangan mengarang angka/tanggal yang tidak ada di judul berita atau bukan pengetahuan resmi yang mapan.
 - Sebar tingkat kesulitan: easy, normal, hard, prof (prof = analisis/studi kasus tingkat lanjut).
-- Pilihan ganda: tepat 4 opsi tanpa huruf di depan, satu jawaban benar, opsi pengecoh masuk akal, JANGAN pakai opsi "semua benar"/"semua salah".
+- Pilihan ganda: tepat 4 opsi tanpa huruf di depan, satu jawaban benar, opsi pengecoh masuk akal, JANGAN pakai opsi "semua benar"/"semua salah". Panjang ke-4 opsi HARUS setara (selisih maks. ±15% karakter) dengan gaya kalimat serupa — jawaban benar TIDAK BOLEH menjadi opsi paling panjang/paling lengkap sendiri, dan pengecoh sama rincinya.
 - "explanation": 1-3 kalimat kenapa jawaban benar (sebut dasar hukum/konsepnya; untuk soal konteks terkini boleh sebut beritanya).
 - Esai: pertanyaan analitis, beri "keyPoints" (3-5 poin kunci) dan "modelAnswer" (4-6 kalimat).
 ${ix.map(k => IX_SPEC[k]).join('\n')}
@@ -321,6 +324,16 @@ ${ix.map(k => IX_JSON[k]).join(',\n')}]}`, { deadline: T0 + (type === 'soal' ? 5
 
 export default handle(['GET', 'POST'], async (req, res) => {
   const by = authorize(req);
+  // 🎭 Samarkan opsi: tulis ulang pengecoh soal yang jawabannya ketahuan dari panjang kalimat
+  if (query(req).get('type') === 'samarkan') {
+    const db = await getDB();
+    const cats = [...new Set([...SEED_QUESTIONS.map(q => q.category), ...Object.keys(NEWS_TOPICS), ...KNOW_CATS])].filter(c => c && c !== 'campuran');
+    if (query(req).get('status') === '1') { const st = await disguiseStatus(db, cats, listAll); return send(res, 200, { total: st.total, tell: st.tell, fixed: st.fixed, remaining: st.todo.length }); }
+    if (!aiEnabled()) throw httpError(400, 'GEMINI_API_KEY belum diatur.');
+    const since = Number(query(req).get('since')) || 0;
+    const r = await runDisguise(db, { cats, listAll, deadline: Date.now() + 52000, maxCalls: by === 'cron' ? 5 : 3, since });
+    return send(res, 200, { ...r, message: r.quota ? 'Kuota Gemini sedang habis — lanjutkan nanti.' : '' });
+  }
   if (!aiEnabled()) throw httpError(400, 'GEMINI_API_KEY belum diatur. Tambahkan di Environment Variables Vercel.');
 
   const type = ['soal', 'materi'].includes(query(req).get('type')) ? query(req).get('type') : 'all';
