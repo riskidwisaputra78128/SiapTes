@@ -34,12 +34,40 @@ export function currentTheme() {
   try { return localStorage.getItem(KEY) || localStorage.getItem(KEY + '_default') || DEFAULT_THEME; } catch { return DEFAULT_THEME; }
 }
 export const userPickedTheme = () => { try { return !!localStorage.getItem(KEY); } catch { return false; } };
-// Tema default dari admin: dipakai bila pengguna belum memilih tema sendiri
-export function applyServerDefault(key) {
-  if (!key || !THEMES.some(t => t.key === key)) return;
+// ───── Tema otomatis sesuai jam (diatur admin) ─────
+export const TIME_SLOTS = [
+  { key: 'pagi', ico: '🌅', name: 'Pagi', from: 5, theme: 'pagi' },
+  { key: 'siang', ico: '☀️', name: 'Siang', from: 10, theme: 'fajar' },
+  { key: 'sore', ico: '🌇', name: 'Sore', from: 15, theme: 'senja' },
+  { key: 'malam', ico: '🌙', name: 'Malam', from: 18, theme: 'malam' },
+];
+/** Slot yang berlaku pada jam h (slot dengan jam mulai terbesar ≤ h; sebelum slot pertama = slot terakhir/malam). */
+export function slotAt(tt, h = new Date().getHours()) {
+  const list = (tt?.slots || []).slice().sort((a, b) => a.from - b.from);
+  if (!list.length) return null;
+  return list.filter(s => s.from <= h).pop() || list[list.length - 1];
+}
+let timeTheme = null, baseDefault = null, ttTimer = null;
+function effectiveDefault() {
+  const slot = timeTheme?.on ? slotAt(timeTheme) : null;
+  return slot?.theme || baseDefault || DEFAULT_THEME;
+}
+function refreshDefault() {
+  const key = effectiveDefault();
+  if (!THEMES.some(t => t.key === key)) return;
   try { localStorage.setItem(KEY + '_default', key); } catch {}
   if (!userPickedTheme() && document.documentElement.getAttribute('data-theme') !== (key === 'dark' ? null : key)) applyTheme(key, { save: false });
 }
+// Tema default dari admin (+ jadwal per jam bila aktif): dipakai bila pengguna belum memilih tema sendiri
+export function applyServerDefault(key, tt) {
+  if (key && THEMES.some(t => t.key === key)) baseDefault = key;
+  timeTheme = tt && tt.on ? tt : null;
+  try { timeTheme ? localStorage.setItem(KEY + '_tt', JSON.stringify(timeTheme)) : localStorage.removeItem(KEY + '_tt'); } catch {}
+  refreshDefault();
+  clearInterval(ttTimer);
+  if (timeTheme) ttTimer = setInterval(refreshDefault, 60 * 1000);   // pindah tema otomatis saat jam berganti
+}
+export const timeThemeOn = () => !!timeTheme;
 
 export function applyTheme(key, { save = true } = {}) {
   const t = THEMES.find(x => x.key === key) || THEMES[0];
@@ -55,7 +83,7 @@ export function openThemePicker() {
   const cur = currentTheme();
   sheet(`
     <div class="row between"><h3 class="h2">🎨 Pilih tema</h3><span class="dim">tersimpan di perangkat ini</span></div>
-    ${userPickedTheme() ? '<button class="btn ghost sm" id="themeReset" style="margin:6px 0 4px">↩️ Ikuti tema default situs</button>' : '<p class="dim" style="margin:4px 0 0">Saat ini mengikuti tema default situs.</p>'}
+    ${userPickedTheme() ? '<button class="btn ghost sm" id="themeReset" style="margin:6px 0 4px">↩️ Ikuti tema default situs</button>' : `<p class="dim" style="margin:4px 0 0">Saat ini mengikuti tema default situs${timeTheme ? ' (berganti otomatis sesuai jam)' : ''}.</p>`}
     <div class="theme-grid">${THEMES.map(t => `
       <button class="theme-opt ${t.key === cur ? 'on' : ''}" data-theme-key="${t.key}">
         <div class="theme-prev" style="background:${t.prev.bg}">
@@ -68,7 +96,7 @@ export function openThemePicker() {
   (el, close) => {
     $('#themeReset', el)?.addEventListener('click', () => {
       try { localStorage.removeItem(KEY); } catch {}
-      const t = applyTheme(localStorage.getItem(KEY + '_default') || DEFAULT_THEME, { save: false });
+      const t = applyTheme(effectiveDefault(), { save: false });
       toast(`Mengikuti tema default: ${t.name} ${t.ico}`, 'ok'); setTimeout(close, 300);
     });
     $$('[data-theme-key]', el).forEach(b => (b.onclick = () => {

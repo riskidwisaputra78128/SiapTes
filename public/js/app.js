@@ -11,7 +11,7 @@ import { renderDuel } from './duel.js';
 import { renderPsikotes } from './psikotes.js';
 import { renderAdminLive } from './admin-live.js';
 import { startPresence, onlineWidget, isHidden, setHidden, presence, refreshPresence } from './presence.js';
-import { applyTheme, currentTheme, openThemePicker, THEMES, applyServerDefault } from './theme.js';
+import { applyTheme, currentTheme, openThemePicker, THEMES, applyServerDefault, TIME_SLOTS, slotAt } from './theme.js';
 import { mountDock, setDockVisible } from './dock.js';
 import { syncScene, sceneRoute } from './scene.js';
 import { setMood, sfx } from './sound.js';
@@ -643,6 +643,15 @@ function renderProfile() {
       <p class="muted" style="margin:6px 0 10px">Tema yang dilihat pengguna baru & pengguna yang belum memilih tema sendiri. Pengguna tetap bisa mengganti tema lewat tombol 🎨.</p>
       <div class="theme-grid admin-theme" id="defTheme">${THEMES.map(t => `<button class="theme-opt" data-dt="${t.key}"><div class="theme-prev" style="background:${t.prev.bg}"><span class="card-mini" style="background:${t.prev.card}"></span><i style="width:40%;background:${t.prev.a}"></i><i style="width:25%;background:${t.prev.b}"></i></div><div class="theme-meta"><b>${t.ico} ${t.name}</b></div></button>`).join('')}</div>
       <div class="dim" id="defThemeInfo" style="margin-top:8px"></div>
+      <div class="ref-admin" id="ttBox">
+        <div class="row between wrap" style="gap:10px"><b>🕒 Tema otomatis sesuai jam</b>
+          <label class="row" style="gap:8px;cursor:pointer"><input type="checkbox" class="switch" id="ttOn"><b id="ttOnTxt">Nonaktif</b></label></div>
+        <p class="dim" style="margin:6px 0 10px;font-size:12.5px">Bila aktif, tema default berganti sendiri mengikuti jam di perangkat pengguna (menggantikan tema default di atas). Pengguna yang sudah memilih tema sendiri tidak terpengaruh.</p>
+        <div class="tt-rows">${TIME_SLOTS.map(sl => `<div class="tt-row" data-slot="${sl.key}"><span class="tt-name">${sl.ico} ${sl.name}</span>
+          <label class="tt-from">mulai <input class="input" type="number" min="0" max="23" value="${sl.from}" data-from> .00</label>
+          <select class="input" data-theme>${THEMES.map(t => `<option value="${t.key}" ${t.key === sl.theme ? 'selected' : ''}>${t.ico} ${t.name}</option>`).join('')}</select></div>`).join('')}</div>
+        <div class="row wrap" style="gap:8px;margin-top:10px;align-items:center"><button class="btn sm" id="ttSave">Simpan jadwal tema</button><span class="dim" id="ttNow" style="font-size:12.5px"></span></div>
+      </div>
     </div>
     <div class="glass card">
       <div class="row between wrap" style="gap:10px"><h2 class="h2" style="margin:0">🤖 Mentor AI di materi</h2>
@@ -720,7 +729,29 @@ function renderProfile() {
     loadFb();
     // ── Tema default ──
     const paintDef = k => { $$('#defTheme [data-dt]').forEach(b => b.classList.toggle('on', b.dataset.dt === k)); const t = THEMES.find(x => x.key === k); $('#defThemeInfo').textContent = t ? `Default saat ini: ${t.ico} ${t.name}` : ''; };
-    getInfo(true).then(d => paintDef(d?.settings?.defaultTheme || 'senja')).catch(() => {});
+    const readTT = () => ({ on: $('#ttOn').checked, slots: $$('#ttBox [data-slot]').map(r => ({ key: r.dataset.slot, from: +$('[data-from]', r).value, theme: $('[data-theme]', r).value })) });
+    const paintTT = () => {
+      const on = $('#ttOn').checked; $('#ttOnTxt').textContent = on ? 'Aktif' : 'Nonaktif';
+      $('#ttBox .tt-rows').classList.toggle('off', !on);
+      const tt = readTT(), sl = slotAt(tt), meta = TIME_SLOTS.find(x => x.key === sl?.key), th = THEMES.find(t => t.key === sl?.theme);
+      $('#ttNow').textContent = on && sl ? `Sekarang (${new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}): ${meta?.ico} ${meta?.name} → ${th?.ico} ${th?.name}` : '';
+    };
+    getInfo(true).then(d => {
+      paintDef(d?.settings?.defaultTheme || 'senja');
+      const tt = d?.settings?.timeTheme;
+      if (tt?.slots) { $('#ttOn').checked = !!tt.on; tt.slots.forEach(x => { const r = $(`#ttBox [data-slot="${x.key}"]`); if (r) { $('[data-from]', r).value = x.from; $('[data-theme]', r).value = x.theme; } }); }
+      paintTT();
+    }).catch(() => {});
+    $('#ttOn').onchange = paintTT;
+    $$('#ttBox input, #ttBox select').forEach(el => el.addEventListener('input', paintTT));
+    $('#ttSave').onclick = async () => {
+      const tt = readTT();
+      try {
+        await api('/presence?op=settings', { method: 'POST', body: { timeTheme: tt } });
+        applyServerDefault(null, tt.on ? tt : null);
+        toast(tt.on ? 'Jadwal tema disimpan — tema berganti otomatis sesuai jam' : 'Tema otomatis dinonaktifkan', 'ok');
+      } catch (e) { toast(e.message, 'err'); }
+    };
     $$('#defTheme [data-dt]').forEach(b => (b.onclick = async () => {
       const k = b.dataset.dt; b.disabled = true;
       try { await api('/presence?op=settings', { method: 'POST', body: { defaultTheme: k } }); paintDef(k); applyServerDefault(k); toast('Tema default disimpan untuk semua pengguna', 'ok'); }
@@ -971,7 +1002,7 @@ applyTheme(currentTheme(), { save: false });
 mountDock();
 syncScene();
 // tema default dari admin (berlaku bila pengguna belum memilih tema sendiri)
-getInfo().then(d => applyServerDefault(d?.settings?.defaultTheme)).catch(() => {});
+getInfo().then(d => applyServerDefault(d?.settings?.defaultTheme, d?.settings?.timeTheme)).catch(() => {});
 if (session.loggedIn) { startPresence(); syncAvatar(); }
 window.addEventListener('hashchange', () => { if (session.loggedIn) startPresence(); });
 $('#themeBtn').onclick = openThemePicker;

@@ -1714,3 +1714,15 @@ body.intro-open { overflow: hidden; }
 .sim-ix .mark, .sim-ix .ix-mark { display: none !important; }
 .ix-saved { margin-top: 14px; padding: 14px; border-radius: 14px; background: rgba(52,211,153,.12); border: 1px solid rgba(52,211,153,.35); font-weight: 600; }
 .sim-ix .dimmed { opacity: 1 !important; }
+/* ── Tema otomatis sesuai jam (admin) ── */
+.tt-rows{display:grid;gap:8px;transition:opacity .2s}
+.tt-rows.off{opacity:.45}
+.tt-row{display:grid;grid-template-columns:90px auto 1fr;gap:10px;align-items:center}
+.tt-name{font-weight:700}
+.tt-from{display:flex;align-items:center;gap:6px;font-size:13px;opacity:.85}
+.tt-from .input{width:64px;padding:8px 10px}
+.tt-row select.input{min-width:0}
+@media (max-width:560px){.tt-row{grid-template-columns:1fr auto}.tt-row select.input{grid-column:1/-1}}
+#ttBox{min-width:0;overflow:hidden}
+#ttBox > .row{flex-wrap:wrap}
+@media (max-width:560px){.tt-row{grid-template-columns:minmax(0,1fr) auto}.tt-from{gap:4px;font-size:12px}.tt-from .input{width:54px;padding:7px 8px}}
