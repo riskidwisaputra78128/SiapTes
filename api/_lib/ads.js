@@ -23,7 +23,7 @@ export function activeAds(map, now = Date.now()) {
   return Object.entries(map || {}).map(([id, a]) => ({ id, ...a }))
     .filter(a => a.active && (!a.start || a.start <= now) && (!a.end || a.end >= now))
     .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
-    .map(({ id, title, text, img, link, cta, tiers }) => ({ id, title, text, img, link, cta, tiers: tiers || ['guest', 'free', 'plus'] }));
+    .map(({ id, title, text, img, link, cta, tiers, wide }) => ({ id, title, text, img, link, cta, wide: !!(img && wide), tiers: tiers || ['guest', 'free', 'plus'] }));
 }
 
 // buffer tayang/klik per server
@@ -102,6 +102,7 @@ export const adsRoute = handle(['GET', 'POST'], async (req, res) => {
   }
   const rec = {
     title, text: String(b.text || '').trim().slice(0, 200), link: cleanUrl(b.link), img,
+    wide: !!(img && b.wide),
     cta: String(b.cta || 'Lihat promo').trim().slice(0, 24), active: b.active !== false, tiers: tiers.length ? tiers : ['guest', 'free'],
     start: Number(b.start) || 0, end: Number(b.end) || 0, createdAt: prev?.createdAt || Date.now(), updatedAt: Date.now(),
   };
