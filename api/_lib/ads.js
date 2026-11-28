@@ -13,6 +13,12 @@ const cleanUrl = (u, allowEmpty = false) => {
   if (!/^https:\/\/[^\s"'<>]{4,500}$/i.test(s)) throw httpError(400, 'Link harus diawali https:// dan valid');
   return s;
 };
+// Gambar banner yang di-upload admin disimpan di koleksi gambar (sama dengan foto profil), bukan Storage
+const IMG_RE = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/;
+const imgKey = id => 'adimg_' + id;
+const ownImg = (u, id) => typeof u === 'string' && u.startsWith(`/api/presence?op=ads&img=${id}`);
+async function dropImg(db, id) { await db.deleteAvatar(imgKey(id)).catch(() => {}); }
+
 export function activeAds(map, now = Date.now()) {
   return Object.entries(map || {}).map(([id, a]) => ({ id, ...a }))
     .filter(a => a.active && (!a.start || a.start <= now) && (!a.end || a.end >= now))
@@ -35,6 +41,18 @@ async function flush(db, force = false) {
 export const adsRoute = handle(['GET', 'POST'], async (req, res) => {
   const db = await getDB();
   const q = query(req);
+  // gambar banner hasil upload (publik, di-cache lama karena URL berversi)
+  if (req.method === 'GET' && q.get('img')) {
+    const id = q.get('img').replace(/[^\w-]/g, '').slice(0, 30);
+    const a = await db.getAvatar(imgKey(id));
+    if (!a?.data) { res.statusCode = 404; res.setHeader('Cache-Control', 'public, max-age=60'); return res.end(); }
+    const bin = Buffer.from(a.data, 'base64');
+    res.statusCode = 200;
+    res.setHeader('Content-Type', a.mime || 'image/webp');
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    res.setHeader('Content-Length', bin.length);
+    return res.end(bin);
+  }
   // pelacakan tayang/klik (boleh tamu)
   if (req.method === 'POST' && q.get('t') === '1') {
     const b = await readBody(req);
@@ -59,6 +77,7 @@ export const adsRoute = handle(['GET', 'POST'], async (req, res) => {
     const id = String(b.id || '');
     await db.setMetaField('ads', id, null);
     await db.setMetaField('adstats', id, null).catch(() => {});
+    await dropImg(db, id);                       // gambar upload ikut terhapus
     return send(res, 200, { ok: true });
   }
   if (b.action !== 'save') throw httpError(400, 'Aksi tidak dikenal');
@@ -67,8 +86,22 @@ export const adsRoute = handle(['GET', 'POST'], async (req, res) => {
   const tiers = (Array.isArray(b.tiers) ? b.tiers : ['guest', 'free', 'plus']).filter(t => ['guest', 'free', 'plus', 'pro'].includes(t));
   const id = /^ad_[a-z0-9]{6,20}$/.test(b.id) ? b.id : 'ad_' + crypto.randomBytes(5).toString('hex');
   const prev = ((await db.getMeta('ads').catch(() => null)) || {})[id];
+  // gambar: upload baru (imgData) → simpan & pakai URL internal; link https biasa; atau dikosongkan
+  let img;
+  const m = IMG_RE.exec(String(b.imgData || ''));
+  if (b.imgData && !m) throw httpError(400, 'Format gambar tidak didukung (pakai JPG, PNG, atau WebP)');
+  if (m) {
+    if (m[2].length > 900000) throw httpError(413, 'Ukuran gambar terlalu besar (maks. ±650 KB setelah dikompres)');
+    await db.setAvatar(imgKey(id), { mime: m[1], data: m[2], updatedAt: Date.now() });
+    img = `/api/presence?op=ads&img=${id}&v=${Date.now().toString(36)}`;
+  } else if (ownImg(b.img, id)) {
+    img = b.img;                                  // gambar upload lama tetap dipakai
+  } else {
+    img = cleanUrl(b.img, true);
+    if (ownImg(prev?.img, id)) await dropImg(db, id);   // diganti link lain / dihapus → file lama dihapus
+  }
   const rec = {
-    title, text: String(b.text || '').trim().slice(0, 200), link: cleanUrl(b.link), img: cleanUrl(b.img, true),
+    title, text: String(b.text || '').trim().slice(0, 200), link: cleanUrl(b.link), img,
     cta: String(b.cta || 'Lihat promo').trim().slice(0, 24), active: b.active !== false, tiers: tiers.length ? tiers : ['guest', 'free'],
     start: Number(b.start) || 0, end: Number(b.end) || 0, createdAt: prev?.createdAt || Date.now(), updatedAt: Date.now(),
   };
