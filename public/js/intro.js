@@ -18,7 +18,7 @@ const ART = {
     <span class="ia-pass">✅ LOLOS AMBANG BATAS</span></div>`,
   mat: () => `<div class="ia-mat">${['📖 Pahami bagian', '🃏 Kartu hafalan', '🔗 Susun alur', '⚖️ Benar/Salah', '🧩 Cocokkan'].map((t, i) => `<span style="--d:${i * .12}s">✅ ${t.slice(2)}</span>`).join('')}<div class="ia-prog"><i></i></div></div>`,
   duel: () => `<div class="ia-duel">${[['🦊', 'Rani', 920], ['🐯', 'Bima', 860], ['🐼', 'Kamu', 1010]].map(([a, n, s], i) => `<div style="--d:${i * .15}s"><span class="ia-av">${a}</span><b>${n}</b><em data-cnt="${s}">0</em></div>`).join('')}<span class="ia-vs">⚡ COMBO ×3</span></div>`,
-  ai: () => `<div class="ia-ai"><div class="ia-msg me">Apa beda BI-Rate dan inflasi inti?</div><div class="ia-msg bot"><span class="ia-typing"><i></i><i></i><i></i></span><span class="ia-ans">BI-Rate adalah suku bunga kebijakan BI, sedangkan inflasi inti…</span></div></div>`,
+  ai: () => `<div class="ia-ai"><div class="ia-msg me">Apa beda BI-Rate dan inflasi inti?</div><div class="ia-msg bot"><span class="ia-typing"><i></i><i></i><i></i></span><span class="ia-ans">BI-Rate adalah suku bunga acuan yang ditetapkan BI untuk mengendalikan inflasi. Inflasi inti adalah kenaikan harga yang tidak ikut harga bergejolak & harga yang diatur pemerintah.</span></div></div>`,
   plans: () => `<div class="ia-plans">${[['🌱', 'Free', 'Mulai gratis'], ['⭐', 'Plus', 'Tanpa batas'], ['👑', 'Pro', 'Semua fitur']].map(([i, n, d], k) => `<div style="--d:${k * .15}s" class="${k === 1 ? 'hot' : ''}"><span>${i}</span><b>${n}</b><small>${d}</small></div>`).join('')}</div>`,
 };
 

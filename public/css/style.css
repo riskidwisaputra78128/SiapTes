@@ -1687,3 +1687,10 @@ body.intro-open { overflow: hidden; }
 .nudge-act{display:flex;align-items:center;gap:6px}
 .nudge-x{background:none;border:0;color:inherit;opacity:.55;font-size:15px;cursor:pointer;padding:6px}.nudge-x:hover{opacity:1}
 @media (max-width:560px){.nudge{grid-template-columns:auto 1fr}.nudge-act{grid-column:1/-1;justify-content:space-between}.nudge-act .btn{flex:1}}
+/* Mentor AI di intro: titik "mengetik" lalu jawaban muncul (tanpa animasi display yang tidak didukung browser) */
+.ia-msg.bot { position: relative; min-height: 40px; }
+.ia-typing { position: absolute; left: 14px; top: 16px; animation: iaGone .2s 1s forwards; }
+.ia-ans { display: block; opacity: 0; clip-path: inset(0 0 100% 0); animation: iaType 1s 1.1s steps(6, end) forwards; }
+@keyframes iaGone { to { opacity: 0; visibility: hidden; } }
+@keyframes iaType { 0% { opacity: 1; clip-path: inset(0 0 100% 0); } 100% { opacity: 1; clip-path: inset(0 0 0 0); } }
+@media (prefers-reduced-motion: reduce) { .ia-typing { display: none; } .ia-ans { opacity: 1; clip-path: none; animation: none; } }
