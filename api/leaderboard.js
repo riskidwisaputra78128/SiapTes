@@ -1,11 +1,20 @@
-// GET /api/leaderboard?period=week|month
-import { handle, query, send } from './_lib/http.js';
-import { getUser } from './_lib/auth.js';
+// GET  /api/leaderboard?period=week|month
+// POST /api/leaderboard { action: 'reset', which: 'week' | 'month' | 'all' }  (khusus admin)
+import { handle, query, send, readBody, httpError } from './_lib/http.js';
+import { getUser, requireUser, isAdmin } from './_lib/auth.js';
 import { getDB } from './_lib/db.js';
 import { avatarMap, avatarUrl } from './_lib/avatar.js';
-import { readBoard } from './_lib/board.js';
+import { readBoard, resetBoards, resetMap } from './_lib/board.js';
 
-export default handle(['GET'], async (req, res) => {
+export default handle(['GET', 'POST'], async (req, res) => {
+  if (req.method === 'POST') {
+    if (!isAdmin(requireUser(req))) throw httpError(403, 'Khusus admin');
+    const b = await readBody(req);
+    if (b.action !== 'reset') throw httpError(400, 'Aksi tidak dikenal');
+    const which = ['week', 'month', 'all'].includes(b.which) ? b.which : 'all';
+    const periods = await resetBoards(await getDB(), which);
+    return send(res, 200, { ok: true, reset: periods });
+  }
   const period = query(req).get('period') === 'month' ? 'month' : 'week';
   const db = await getDB();
   // ringkasan per periode (1 dokumen) — bukan lagi membaca seluruh riwayat latihan
@@ -20,5 +29,6 @@ export default handle(['GET'], async (req, res) => {
     avatar: avatarUrl(o.uid, avs),
   }));
   const mine = ranked.find(r => r.me) || null;
-  send(res, 200, { period, top: ranked.slice(0, 20), mine, participants: ranked.length });
+  const resetAt = Number((await resetMap(db))[period]) || 0;
+  send(res, 200, { period, top: ranked.slice(0, 20), mine, participants: ranked.length, resetAt });
 });
