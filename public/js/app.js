@@ -16,6 +16,7 @@ import { mountDock, setDockVisible } from './dock.js';
 import { syncScene, sceneRoute } from './scene.js';
 import { setMood, sfx } from './sound.js';
 import { quotaCard, bindQuotaCard } from './quota.js';
+import { renderLegal, legalLinks, LEGAL } from './legal.js';
 import { renderLangganan, tierNow, TIER_NAME, TIER_ICO, untilText, subBanner, upgradeNudge, bindUpgradeNudge, adminSubSheet, adminPayCard, bindAdminPayCard, upgradeSheet, refreshMe } from './plan.js';
 import { renderAds, adSlot, bindAdSlots } from './ads.js';
 import { renderIntro, introCarousel, introSeen } from './intro.js';
@@ -64,7 +65,8 @@ async function route() {
   const [path, qs] = location.hash.replace(/^#\/?/, '').split('?');
   const params = new URLSearchParams(qs || '');
   const authed = session.loggedIn || session.guest;
-  if (!authed && path !== 'login' && path !== 'teknologi') { location.hash = '#/login'; return; }
+  const pub = path === 'teknologi' || path in LEGAL;
+  if (!authed && path !== 'login' && !pub) { location.hash = '#/login'; return; }
   if (session.loggedIn && path === 'login') { location.hash = '#/'; return; }
   window.scrollTo(0, 0);
   const inQuiz = path === 'quiz';
@@ -76,7 +78,7 @@ async function route() {
   else setMood(MOOD_OF[path] || 'normal');
   if (lastPath !== null && lastPath !== path) sfx('nav');
   lastPath = path;
-  chrome(path !== 'login' && !inQuiz && (authed || path !== 'teknologi'), path);
+  chrome(path !== 'login' && !inQuiz && (authed || !pub), path);
   app.innerHTML = '';
   try {
     switch (path) {
@@ -90,6 +92,7 @@ async function route() {
       case 'peringkat': await renderLeaderboard(app); break;
       case 'profil': renderProfile(); break;
       case 'teknologi': renderTech(app); break;
+      case 'syarat': case 'privasi': case 'refund': await renderLegal(app, path); break;
       case 'materi': await renderMateri(app, params); break;
       case 'duel': await renderDuel(app, params); break;
       case 'psikotes': renderPsikotes(app, params); break;
@@ -175,7 +178,7 @@ function renderAuth() {
           <select id="fTarget" class="input">${TARGETS.map(t => `<option>${t}</option>`).join('')}</select></div>
         <div class="field reg" hidden><label for="fRef">Kode referal <span class="dim">(opsional)</span></label><input id="fRef" class="input" maxlength="32" autocomplete="off" placeholder="Punya kode? Dapat trial Plus gratis"></div>
         <button class="btn block" id="authBtn" type="submit">Masuk</button>
-        <p class="dim" style="text-align:center;margin:0">Belum mau daftar? <button type="button" class="link-btn" id="guestBtn">Coba sebagai tamu</button><br><small>(progres tamu tidak tersimpan)</small><br><a href="#/teknologi" class="link-btn" style="font-size:13px">⚙️ Teknologi di balik SiapLolos</a> · <button type="button" class="link-btn" id="authTheme" style="font-size:13px">🎨 Ganti tema</button></p>
+        <p class="dim" style="text-align:center;margin:0">Belum mau daftar? <button type="button" class="link-btn" id="guestBtn">Coba sebagai tamu</button><br><small>(progres tamu tidak tersimpan)</small><br><a href="#/teknologi" class="link-btn" style="font-size:13px">⚙️ Teknologi di balik SiapLolos</a> · <button type="button" class="link-btn" id="authTheme" style="font-size:13px">🎨 Ganti tema</button><br>${legalLinks('sm')}</p>
       </form>
     </div>
   </section>`;
@@ -671,6 +674,7 @@ function renderProfile() {
     ${canKantor() ? '<a class="btn ghost block" href="#/kantor">🏢 Kantor Live</a>' : ''}
     <a class="btn ghost block" href="#/peringkat">🏆 Papan peringkat</a>
     <a class="btn ghost block" href="#/teknologi">⚙️ Teknologi di balik SiapLolos</a>
+    <p style="text-align:center;margin:10px 0 0">${legalLinks('sm')}</p>
     <button class="btn ghost block" id="logoutBtn">Keluar</button>
   </section>`;
   const tn = () => { const t = THEMES.find(x => x.key === currentTheme()); $('#profThemeName') && ($('#profThemeName').textContent = `${t.ico} ${t.name} — ${t.desc}`); };

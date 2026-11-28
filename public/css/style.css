@@ -1694,3 +1694,16 @@ body.intro-open { overflow: hidden; }
 @keyframes iaGone { to { opacity: 0; visibility: hidden; } }
 @keyframes iaType { 0% { opacity: 1; clip-path: inset(0 0 100% 0); } 100% { opacity: 1; clip-path: inset(0 0 0 0); } }
 @media (prefers-reduced-motion: reduce) { .ia-typing { display: none; } .ia-ans { opacity: 1; clip-path: none; animation: none; } }
+
+/* ── Halaman legal ── */
+.legal-card{max-width:820px;margin:0 auto;width:100%}
+.legal-lead{font-size:15px;line-height:1.6;margin:12px 0 4px}
+.legal-sec{margin-top:18px}
+.legal-sec h2{display:flex;align-items:center;gap:10px;font-size:17px;margin:0 0 8px}
+.legal-sec h2 span{width:26px;height:26px;border-radius:9px;display:grid;place-items:center;font-size:13px;background:var(--grad);color:#1a1020;flex:none}
+.legal-sec p,.legal-sec li{font-size:14px;line-height:1.65}
+.legal-sec ul,.legal-sec ol{padding-left:20px;margin:6px 0}
+.legal-sec li+li{margin-top:5px}
+.legal-sec a,.legal-links a{color:var(--cyan);text-decoration:underline;text-underline-offset:2px}
+.legal-contact{list-style:none;padding:0!important}
+.legal-links.sm{font-size:12.5px}

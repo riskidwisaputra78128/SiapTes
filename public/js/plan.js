@@ -2,6 +2,7 @@
 // Batas yang sebenarnya ditegakkan di server (api/_lib/plan.js); di sini untuk mengunci tombol & menampilkan ajakan upgrade.
 import { api, session } from './api.js';
 import { $, $$, esc, toast, sheet, fmt, confetti } from './ui.js';
+import { legalLinks } from './legal.js';
 
 export const TIER_NAME = { guest: 'Tamu', free: 'Free', plus: 'Plus', pro: 'Pro' };
 export const TIER_ICO = { guest: '👀', free: '🌱', plus: '⭐', pro: '👑' };
@@ -178,7 +179,7 @@ export async function renderLangganan(app, params) {
     </div>
     ${me?.trialAvailable && cur === 'free' ? `<div class="glass card trial-card"><div class="trial-ico">🎁</div><div><b>Punya kode referal? Coba Plus gratis</b><p class="muted" style="margin:4px 0 0">Masukkan kode referal untuk membuka trial Plus ${me.trialDays || 3} hari tanpa bayar. Setelah habis, akun otomatis kembali ke Free. Hanya sekali per akun.</p></div><div class="trial-form"><input class="input" id="trialCode" maxlength="32" placeholder="Kode referal" autocomplete="off"><button class="btn" id="trialBtn">Pakai kode</button></div></div>` : ''}
     <div class="plan-grid">${card('plus', 'Paling populer')}${card('pro', 'Terlengkap')}</div>
-    <p class="dim pay-note">💳 Pembayaran aman lewat Midtrans: QRIS, Virtual Account bank, dan GoPay. Paket aktif otomatis setelah pembayaran berhasil dan berlaku 30 hari. Kami mengingatkanmu 5 hari sebelum masa langganan berakhir — tidak ada penagihan otomatis.</p>
+    <p class="dim pay-note">💳 Pembayaran aman lewat Midtrans: QRIS, Virtual Account bank, dan GoPay. Paket aktif otomatis setelah pembayaran berhasil dan berlaku 30 hari. Kami mengingatkanmu 5 hari sebelum masa langganan berakhir — tidak ada penagihan otomatis.<br>Dengan membayar, kamu menyetujui ${legalLinks()}.</p>
     <div class="glass card"><h2 class="h2" style="margin-bottom:10px">Bandingkan paket</h2>${compareTable(cur)}</div>
   </section>`;
   $$('[data-buy]', app).forEach(b => (b.onclick = () => checkout(b.dataset.buy, b)));
@@ -248,7 +249,10 @@ export function adminPayCard() {
     <div id="payList" class="pay-list"><div class="skel" style="height:60px"></div></div>
     <div class="ref-admin"><div class="row between wrap" style="gap:8px"><h3 class="h3" style="margin:0">🎟️ Kode referal trial</h3><button class="btn sm ghost" id="refNew">+ Kode baru</button></div>
       <p class="dim" style="margin:4px 0 10px;font-size:12.5px">Pengguna wajib memasukkan kode yang aktif untuk membuka trial (sekali per akun).</p>
-      <div id="refList"><div class="skel" style="height:48px"></div></div></div></div>`;
+      <div id="refList"><div class="skel" style="height:48px"></div></div></div>
+    <div class="ref-admin"><h3 class="h3" style="margin:0">📄 Halaman legal & kontak</h3>
+      <p class="dim" style="margin:4px 0 10px;font-size:12.5px">Kontak ini tampil di halaman ${legalLinks()} (bisa dibuka tanpa login — dibutuhkan saat review Midtrans).</p>
+      <div class="row wrap" style="gap:8px"><input class="input" id="ctEmail" type="email" placeholder="Email kontak" style="flex:1;min-width:180px"><input class="input" id="ctWa" inputmode="tel" placeholder="No. WhatsApp, mis. 0812…" style="flex:1;min-width:160px"><button class="btn sm" id="ctSave">Simpan kontak</button></div></div></div>`;
 }
 function refSheet(c, reload) {
   const isNew = !c;
@@ -312,6 +316,11 @@ export async function bindAdminPayCard() {
     catch (e) { toast(e.message, 'err'); }
   };
   bindRefCodes();
+  import('./api.js').then(m => m.getInfo(true)).then(d => { const c = d.settings?.contact || {}; if ($('#ctEmail')) { $('#ctEmail').value = c.email || ''; $('#ctWa').value = c.wa || ''; } }).catch(() => {});
+  $('#ctSave').onclick = async () => {
+    try { await api('/presence?op=settings', { method: 'POST', body: { contactEmail: $('#ctEmail').value.trim(), contactWa: $('#ctWa').value.trim() } }); toast('Kontak disimpan', 'ok'); }
+    catch (e) { toast(e.message, 'err'); }
+  };
 }
 // notifikasi admin dari detak online
 export function notifyAdminPay(lastPay) {

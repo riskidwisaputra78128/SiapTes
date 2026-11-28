@@ -17,6 +17,8 @@ const settingsRoute = handle(['POST'], async (req, res) => {
   if (b.defaultTheme !== undefined) { if (!THEME_KEYS.includes(b.defaultTheme)) throw httpError(400, 'Tema tidak dikenal'); patch.defaultTheme = b.defaultTheme; patch.dtv = 2; }
   if (b.tutorEnabled !== undefined) patch.tutorEnabled = !!b.tutorEnabled;
   if (b.tutorDaily !== undefined) { const n = parseInt(b.tutorDaily, 10); if (!(n >= 1 && n <= 200)) throw httpError(400, 'Batas harian 1–200'); patch.tutorDaily = n; }
+  if (b.contactEmail !== undefined) { const e = String(b.contactEmail).trim().slice(0, 120); if (e && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e)) throw httpError(400, 'Format email kontak tidak valid'); patch.contactEmail = e; }
+  if (b.contactWa !== undefined) { const w = String(b.contactWa).replace(/[^\d+]/g, '').replace(/^\+/, ''); if (w && !/^\d{9,15}$/.test(w)) throw httpError(400, 'Nomor WhatsApp 9–15 digit'); patch.contactWa = w; }
   if (!Object.keys(patch).length) throw httpError(400, 'Tidak ada pengaturan yang diubah');
   const db = await getDB();
   const cur = (await db.getMeta('settings').catch(() => null)) || {};
