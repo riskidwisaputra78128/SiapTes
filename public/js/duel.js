@@ -527,6 +527,7 @@ function renderRoom(app, code, wantView) {
       <div class="glass result-hero">
         <h1 class="h2" style="font-size:24px">${spec() ? `🏁 Duel selesai — ${esc(ps[0]?.name || '')} juara!` : meP?.rank === 1 ? '🏆 Kamu juara!' : `Kamu peringkat ${meP?.rank ?? '-'} dari ${ps.length}`}</h1>
         <p class="muted" style="margin:6px 0 0">${!spec() && meP ? `${meP.correct}/${st.settings.count} ${m === 'psikotes' ? 'ronde dikerjakan' : 'benar'} · ${fmt(meP.score)} poin` : `${ps.length} peserta · ${st.settings.count} ${m === 'psikotes' ? 'ronde' : 'soal'}`}</p>
+        ${st.allOut ? `<p class="chip" style="margin:10px auto 0;display:inline-block">💀 Semua pemain gugur di soal ${st.review?.length || ''} — duel selesai lebih awal</p>` : ''}
         <div class="podium" style="margin-top:18px">${pod(ps[1], 'p2')}${pod(ps[0], 'p1')}${pod(ps[2], 'p3')}</div>
         <p class="dim" id="saveDuel" style="margin:4px 0 0"></p>
       </div>

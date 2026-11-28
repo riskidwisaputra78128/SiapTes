@@ -77,6 +77,11 @@ function livesBefore(room, p, i) {
   return LIVES - lost;
 }
 
+// Masih ada pemain manusia yang hidup (nyawa > 0) & belum keluar saat soal ke-i dibuka?
+function arenaAlive(room, i, open) {
+  return Object.values(room.players).some(p => !(p.left && (p.leftAt || 0) <= open) && livesBefore(room, p, i) > 0);
+}
+
 // Waktu tutup soal ke-i: penuh, ATAU lebih cepat bila semua peserta aktif sudah menjawab
 function closeOf(room, i, open) {
   const full = open + room.perQ * 1000;
@@ -101,6 +106,8 @@ function timeline(room, now) {
   const n = room.questions.length, rv = revealOf(room) * 1000;
   let open = room.startAt;
   for (let i = 0; i < n; i++) {
+    // Arena: semua pemain (manusia) sudah gugur → duel selesai, tidak perlu menunggu sisa soal
+    if (room.mode === 'arena' && i > 0 && !arenaAlive(room, i, open)) return { phase: 'finished', idx: i, endAt: open, early: true };
     const close = closeOf(room, i, open), next = close + rv;
     if (now < next) return { phase: now < close ? 'question' : 'reveal', idx: i, open, close, next, early: close < open + room.perQ * 1000 - 50 };
     open = next;
@@ -117,7 +124,7 @@ function standings(room, now, tl) {
   });
   if (room.bot) {
     const b = BOTS[room.bot]; const answers = {}; let score = 0, correct = 0;
-    const doneUpto = tl.phase === 'finished' ? room.questions.length - 1 : Math.min(tl.idx ?? -1, room.questions.length - 1);
+    const doneUpto = tl.phase === 'finished' ? Math.min(tl.idx ?? room.questions.length, room.questions.length) - 1 : Math.min(tl.idx ?? -1, room.questions.length - 1);
     for (let i = 0; i <= doneUpto; i++) {
       const a = botAnswer(room, i);
       if (i === tl.idx && tl.phase === 'question') {
@@ -148,7 +155,7 @@ function publicView(room, me, now, avs = {}, viewers = 0) {
       avatar: p.isBot ? null : avatarUrl(p.uid, avs),
       score: p.score || 0, correct: p.correct || 0, left: !!p.left, rank: rank + 1,
       answered: !!cur,
-      lives: room.mode === 'arena' && !p.isBot ? Math.max(0, livesBefore(room, p, Math.max(0, tl.phase === 'finished' ? room.questions.length : tl.phase === 'reveal' ? tl.idx + 1 : tl.idx))) : undefined,
+      lives: room.mode === 'arena' && !p.isBot ? Math.max(0, livesBefore(room, p, Math.max(0, tl.phase === 'finished' ? Math.min(tl.idx ?? room.questions.length, room.questions.length) : tl.phase === 'reveal' ? tl.idx + 1 : tl.idx))) : undefined,
       live: room.mode === 'psikotes' && cur ? { right: cur.right || 0, wrong: cur.wrong || 0 } : undefined,
       last: showLast ? (cur ? { ok: cur.ok, pts: cur.pts, ms: cur.ms, ratio: cur.ratio, right: cur.right, wrong: cur.wrong } : null) : undefined,
     };
@@ -168,12 +175,12 @@ function publicView(room, me, now, avs = {}, viewers = 0) {
     }
     if (tl.phase === 'reveal') Object.assign(question, { answer: q.answer, explanation: q.explanation || '', keyPoints: q.keyPoints, modelAnswer: q.modelAnswer });
   }
-  const review = tl.phase === 'finished' && member ? room.questions.map((q, i) => ({
+  const review = tl.phase === 'finished' && member ? room.questions.slice(0, Math.min(tl.idx ?? room.questions.length, room.questions.length)).map((q, i) => ({
     mode: room.mode, question: q.question, options: q.options, answer: q.answer, explanation: q.explanation || '', modelAnswer: q.modelAnswer, kind: q.kind,
     mine: room.players[me]?.answers?.[i] ?? null,
   })) : undefined;
   return {
-    code: room.code, title: room.title, status: room.status, phase: tl.phase, closedReason: room.closedReason || null, visibility: room.visibility, mode: room.mode, psiType: room.psiType || null,
+    code: room.code, title: room.title, status: room.status, phase: tl.phase, allOut: tl.phase === 'finished' && !!tl.early, closedReason: room.closedReason || null, visibility: room.visibility, mode: room.mode, psiType: room.psiType || null,
     settings: { category: room.category, difficulty: room.difficulty, count: room.questions?.length || room.count, perQ: room.perQ, maxPlayers: room.maxPlayers, bot: room.bot, mode: room.mode },
     host: { name: room.host.name, me: room.host.uid === me },
     players, question, review, viewers,
