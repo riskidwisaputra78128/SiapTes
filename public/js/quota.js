@@ -2,7 +2,7 @@
 import { api } from './api.js';
 import { $, $$, esc, toast, fmt } from './ui.js';
 
-const FEAT = { 'mentor-ai': '🤖 Mentor AI', 'nilai-esai': '✍️ Penilaian esai', 'materi-harian': '📰 Materi harian', 'soal-harian': '📝 Soal harian', 'materi-dasar': '📚 Materi dasar', 'soal-admin': '🧪 Generate soal (admin)', 'materi-admin': '📖 Generate materi (admin)', lain: '• Lainnya' };
+const FEAT = { 'mentor-ai': '🤖 Mentor AI', 'nilai-esai': '✍️ Penilaian esai', 'materi-harian': '📰 Materi harian', 'soal-harian': '📝 Soal harian', 'materi-dasar': '📚 Materi dasar', 'soal-admin': '🧪 Generate soal (admin)', 'materi-admin': '📖 Generate materi (admin)', 'samarkan-opsi': '🎭 Samarkan opsi', lain: '• Lainnya' };
 const time = ms => new Date(ms).toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit' });
 const tone = p => (p >= 85 ? '#f87171' : p >= 60 ? '#fbbf24' : '#34d399');
 const bar = (label, used, limit) => {

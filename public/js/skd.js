@@ -9,6 +9,7 @@ import { api } from './api.js';
 import { $, $$, esc, toast, sheet, icons, mmss, vibrate, ring, animateRings, countUp, confetti } from './ui.js';
 import { sfx } from './sound.js';
 import { handleGate } from './plan.js';
+import { mountEngine, IX_KIND, ixAnswerHTML } from './interactive.js';
 
 const L = ['A', 'B', 'C', 'D', 'E'];
 
@@ -122,7 +123,7 @@ export function openSimIntro(key, { seenKeys, rememberSeen, practice }) {
       ${ex.parts.map(p => `<div class="skd-rule"><b>${esc(p.name)}</b><span>${p.n} soal</span><span class="dim">${ex.scoring === 'cat' ? `maks ${p.max} · ` : ''}${ex.official === true || p.src ? 'lolos' : 'target'} ≥ ${p.pass}</span></div>`).join('')}
     </div>
     ${ex.stages ? `<div class="sim-stages">${ex.stages.map((s, i) => `<span class="${i === 1 || (ex.key !== 'telkom' && i === 2) ? 'on' : ''}">${esc(s)}</span>`).join('<i>›</i>')}</div>` : ''}
-    <ul class="skd-list">${ex.rules.map(r => `<li>${r}</li>`).join('')}<li>📖 Pembahasan muncul setelah selesai.</li></ul>
+    <ul class="skd-list">${ex.rules.map(r => `<li>${r}</li>`).join('')}${ex.key !== 'skd' ? '<li>🧩 Sekitar 15% soal berbentuk <b>interaktif</b> (urutkan, cocokkan, isi rumpang, benar/salah, grafik) seperti tes online masa kini — nilainya parsial sesuai bagian yang tepat.</li>' : ''}<li>📖 Pembahasan muncul setelah selesai.</li></ul>
     <button class="btn block" id="simGo">Mulai simulasi (${total} soal) ▶</button>`,
   (el, close) => {
     $('#simGo', el).onclick = async () => {
@@ -143,6 +144,7 @@ export function openSimIntro(key, { seenKeys, rememberSeen, practice }) {
 // Skor satu soal
 function pointOf(ex, q, chosen) {
   if (chosen === null || chosen === undefined) return 0;
+  if (q.type === 'interactive') return Math.round((chosen.ratio || 0) * 100) / 100;   // nilai parsial 0–1
   if (ex.scoring === 'cat' && q.section === 'tkp' && Array.isArray(q.scores)) return q.scores[chosen] || 0;
   return chosen === q.answer ? (ex.scoring === 'cat' ? 5 : 1) : 0;
 }
@@ -194,9 +196,9 @@ export function runSim(app, practice, { complete, confirmExit }) {
       <div class="glass q-card fade-in">
         <div class="q-meta"><span class="chip skd-chip s${parts.indexOf(p)}">${esc(p.name)} · ${no}/${of}</span><span class="chip">Soal ${st.i + 1}/${n}</span>
           <span class="dim q-full">${esc(p.full)}</span></div>
-        <p class="q-text">${esc(q.question)}</p>
+        ${q.type === 'interactive' ? ixBody(q) : `<p class="q-text">${esc(q.question)}</p>
         <div class="opts">${q.options.map((o, k) => `
-          <button class="opt ${st.ans[st.i] === k ? 'sel' : ''}" data-k="${k}"><span class="key">${L[k]}</span><span class="${/^[^a-z0-9]{1,8}$/i.test(o) ? 'opt-sym' : ''}">${esc(o)}</span></button>`).join('')}</div>
+          <button class="opt ${st.ans[st.i] === k ? 'sel' : ''}" data-k="${k}"><span class="key">${L[k]}</span><span class="${/^[^a-z0-9]{1,8}$/i.test(o) ? 'opt-sym' : ''}">${esc(o)}</span></button>`).join('')}</div>`}
       </div>
       <div class="q-nav">
         <button class="btn ghost" id="prevBtn" ${st.i === 0 ? 'disabled' : ''}>← Sebelumnya</button>
@@ -204,11 +206,36 @@ export function runSim(app, practice, { complete, confirmExit }) {
         ${st.i === n - 1 ? '<button class="btn" id="doneBtn">Selesai ✓</button>' : '<button class="btn" id="nextBtn">Berikutnya →</button>'}
       </div>`;
     $$('.opt', app).forEach(b => (b.onclick = () => { st.ans[st.i] = +b.dataset.k; vibrate(10); sfx('click'); draw(); }));
+    if (q.type === 'interactive') bindIx(q);
     $('#prevBtn').onclick = () => { st.i--; draw(); };
     $('#nextBtn') && ($('#nextBtn').onclick = () => { st.i++; draw(); });
     $('#doneBtn') && ($('#doneBtn').onclick = askFinish);
     $('#flagBtn').onclick = () => { st.flag.has(st.i) ? st.flag.delete(st.i) : st.flag.add(st.i); draw(); };
   }
+  // ── soal interaktif: kerjakan → "Simpan jawaban" (benar/salah tidak ditampilkan sampai simulasi selesai)
+  function ixBody(q) {
+    const k = IX_KIND[q.kind] || IX_KIND.order, saved = st.ans[st.i];
+    return `<div class="kind-tag">${k.ico} Soal interaktif · ${k.name}</div>
+      <p class="q-text">${esc(q.question)}</p>
+      <p class="dim" style="margin:6px 0 0;font-size:13px">💡 ${k.hint}</p>
+      ${saved ? `<div class="ix-saved">✅ Jawaban tersimpan. <button class="link-btn" id="ixRedo">Kerjakan ulang</button></div>`
+        : `<div id="stage" class="ix-stage sim-ix"></div>
+      <div class="row" style="margin-top:12px;gap:10px"><button class="btn ghost sm" id="ixReset">↺ Ulang</button><button class="btn" id="ixSave" style="flex:1" disabled>Simpan jawaban</button></div>`}`;
+  }
+  function bindIx(q) {
+    const redo = $('#ixRedo');
+    if (redo) { redo.onclick = () => { st.ans[st.i] = null; draw(); }; return; }
+    const stage = $('#stage'); if (!stage) return;
+    const engine = mountEngine(stage, q, { setReady: ok => { const b = $('#ixSave'); if (b) b.disabled = !ok; } });
+    $('#ixReset').onclick = () => { engine.reset(); $('#ixSave').disabled = true; };
+    $('#ixSave').onclick = () => {
+      const res = engine.check();          // hasil dinilai sekarang, tapi tanda benar/salah disembunyikan (CSS .sim-ix)
+      st.ans[st.i] = { ratio: Math.max(0, Math.min(1, res.ratio || 0)) };
+      vibrate(10); sfx('click');
+      setTimeout(() => { if (st.i < n - 1) st.i++; draw(); }, 350);
+    };
+  }
+
   function openGrid() {
     sheet(`<div class="row between" style="margin-bottom:10px"><h3 class="h2">Navigasi soal</h3><span class="dim">${st.ans.filter(a => a !== null).length}/${n} terjawab</span></div>
       ${parts.map(p => `<div class="skd-grid-h"><b>${esc(p.name)}</b><span class="dim">${esc(p.full)}</span></div>
@@ -233,8 +260,8 @@ export function runSim(app, practice, { complete, confirmExit }) {
     if (done) return; done = true; clearInterval(tick);
     const review = qs.map((q, k) => {
       const pts = pointOf(ex, q, st.ans[k]);
-      const ok = ex.scoring === 'cat' ? pts === 5 : pts === 1;
-      return { q, chosen: st.ans[k], pts, ok };
+      const ok = ex.scoring === 'cat' ? pts === 5 : pts >= 0.999;
+      return { q, chosen: st.ans[k], pts, ok, ratio: q.type === 'interactive' ? (st.ans[k]?.ratio || 0) : undefined };
     });
     const sec = {};
     parts.forEach(p => {
@@ -249,7 +276,7 @@ export function runSim(app, practice, { complete, confirmExit }) {
     complete({
       total: n, correct: review.filter(r => r.ok).length,
       score: ex.scoring === 'cat' ? Math.round((total / ex.max) * 100) : total,
-      points: ex.scoring === 'cat' ? total * 2 : review.filter(r => r.ok).length * 10,
+      points: ex.scoring === 'cat' ? total * 2 : Math.round(review.reduce((a, r) => a + r.pts, 0) * 10),
       durationSec: (Date.now() - st.start) / 1000, review,
       sim: { exam: ex.key, sec, total, pass, passEach, answered: st.ans.filter(a => a !== null).length },
     });
@@ -258,7 +285,7 @@ export function runSim(app, practice, { complete, confirmExit }) {
     if (!document.body.contains($('#qWrap'))) return removeEventListener('keydown', onKey);
     if (document.querySelector('.sheet')) return;
     const k = '12345abcde'.indexOf(e.key.toLowerCase()) % 5;
-    if (k >= 0 && k < qs[st.i].options.length) { st.ans[st.i] = k; draw(); }
+    if (qs[st.i].type !== 'interactive' && k >= 0 && k < qs[st.i].options.length) { st.ans[st.i] = k; draw(); }
     if (e.key === 'ArrowRight' && st.i < n - 1) { st.i++; draw(); }
     if (e.key === 'ArrowLeft' && st.i > 0) { st.i--; draw(); }
   };
@@ -285,6 +312,12 @@ export function renderSimResult(app, r, { session }) {
   };
   const pgReview = x => {
     const q = x.q;
+    if (q.type === 'interactive') {
+      const pct = Math.round((x.ratio || 0) * 100), k = IX_KIND[q.kind] || IX_KIND.order;
+      return `<div class="review-item">
+      <div class="row" style="align-items:flex-start"><span>${x.ok ? '✅' : pct >= 50 ? '◐' : '❌'}</span><b>${esc(q.question)}</b><span class="chip" style="margin-left:auto">${k.ico} ${x.chosen ? pct + '%' : 'kosong'}</span></div>
+      <div class="ans"><span style="color:var(--green)">${ixAnswerHTML(q)}</span>${q.explanation ? `<span class="muted">${esc(q.explanation)}</span>` : ''}</div></div>`;
+    }
     return `<div class="review-item">
       <div class="row" style="align-items:flex-start"><span>${x.ok ? '✅' : '❌'}</span><b>${esc(q.question)}</b></div>
       <div class="ans">

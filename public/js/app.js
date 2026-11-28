@@ -624,6 +624,11 @@ function renderProfile() {
       </div>
       <p class="dim" style="margin:8px 0 0">💡 Jalankan satu per satu, beri jeda ±1 menit agar kuota Gemini tidak cepat habis.</p>
       <pre id="genOut" class="dim" style="white-space:pre-wrap;margin:12px 0 0"></pre><div id="genLinks"></div>
+      <div class="ref-admin" id="disgBox"><div class="row between wrap" style="gap:8px"><b>🎭 Samarkan opsi jawaban</b><span class="dim" id="disgStat">memuat…</span></div>
+        <p class="dim" style="margin:6px 0 10px;font-size:12.5px">Mencari soal yang jawabannya ketahuan karena kalimatnya paling panjang, lalu Gemini menulis ulang opsi pengecoh agar panjang & gayanya setara. Berjalan juga otomatis setiap hari (±40 soal).</p>
+        <div class="disg-track"><i id="disgBar"></i></div>
+        <div class="row wrap" style="gap:8px;margin-top:10px"><button class="btn sm" id="disgRun">▶️ Samarkan sekarang</button><button class="btn sm ghost" id="disgStop" hidden>⏹️ Berhenti</button></div>
+        <p class="dim" id="disgOut" style="margin:8px 0 0;font-size:12.5px"></p></div>
     </div>
     ${quotaCard()}
     ${adminPayCard()}
@@ -722,6 +727,7 @@ function renderProfile() {
       catch (e) { toast(e.message, 'err'); } finally { b.disabled = false; }
     }));
     bindQuotaCard();
+    bindDisguise();
     bindAdminPayCard();
     // ── Kelola akun ──
     let accAll = [];
@@ -890,12 +896,51 @@ function renderProfile() {
         const r = await api('/generate?type=' + type + '&basis=' + basis + (cats.length ? '&cats=' + cats.join(',') : ''), { method: 'POST' });
         $('#genOut').textContent = r.summary.map(s => `${catByKey[s.cat]?.name || s.cat}: ${type === 'soal' ? `${s.saved} soal` : `${s.material || 0} materi`}${s.reason ? ' — ' + s.reason : ''}`).join('\n');
         if (r.message) { toast(r.message, 'err'); $('#genOut').textContent = '⚠️ ' + r.message + '\n\n' + $('#genOut').textContent; }
+        // soal baru langsung dicek: yang jawabannya ketahuan dari panjang kalimat disamarkan otomatis
+        if (type !== 'materi' && r.total > 0) {
+          const out = $('#genOut'); out.textContent += '\n\n🎭 Mengecek panjang opsi soal baru…';
+          api('/generate?type=samarkan&since=' + ((r.at || Date.now()) - 180000), { method: 'POST', body: {} })
+            .then(d => { out.textContent = out.textContent.replace('🎭 Mengecek panjang opsi soal baru…', d.fixed ? `🎭 ${d.fixed} soal baru disamarkan otomatis (opsi dibuat sama panjang).` : '🎭 Opsi soal baru sudah seimbang — tidak ada yang perlu disamarkan.'); bindDisguise(); })
+            .catch(() => { out.textContent = out.textContent.replace('🎭 Mengecek panjang opsi soal baru…', '🎭 Penyamaran otomatis dilewati — akan dicoba lagi lewat jadwal harian.'); });
+        }
         else if (type === 'soal') { toast(`${r.total} soal baru ditambahkan`, 'ok'); if (r.total) $('#genLinks').innerHTML = '<a class="btn ghost sm" href="#/latihan?fresh=1&category=' + (cats[0] || 'isu') + '" style="margin-top:10px">🎯 Coba soal terbaru</a>'; }
         else { toast(`${r.materials} materi baru ditambahkan`, 'ok'); if (r.materials) $('#genLinks').innerHTML = '<a class="btn ghost sm" href="#/materi?r=1" style="margin-top:10px">📖 Lihat materi terbaru</a>'; }
       } catch (e) { toast(e.message, 'err'); }
       genBtns.forEach(x => (x.disabled = false)); b.innerHTML = label; loadStatus();
     }));
   }
+}
+
+// 🎭 Admin: samarkan opsi jawaban yang terlalu mencolok (berjalan bertahap sampai habis)
+function bindDisguise() {
+  const stat = $('#disgStat'); if (!stat) return;
+  let stop = false;
+  const paint = d => {
+    const all = d.tell + (d.alreadyFixed ?? d.fixed);
+    const pct = all ? Math.round(((d.alreadyFixed ?? d.fixed) / all) * 100) : 100;
+    stat.textContent = d.remaining ? `${fmt(d.remaining)} soal masih mencolok · ${fmt(d.alreadyFixed ?? d.fixed)} sudah disamarkan` : `✅ Semua soal seimbang (${fmt(d.alreadyFixed ?? d.fixed)} disamarkan)`;
+    $('#disgBar').style.width = pct + '%';
+  };
+  api('/generate?type=samarkan&status=1').then(paint).catch(e => (stat.textContent = e.message));
+  $('#disgStop').onclick = () => { stop = true; $('#disgStop').disabled = true; };
+  $('#disgRun').onclick = async () => {
+    stop = false; const run = $('#disgRun'), st = $('#disgStop'), out = $('#disgOut');
+    run.disabled = true; st.hidden = false; st.disabled = false;
+    let total = 0, rounds = 0;
+    try {
+      while (!stop) {
+        out.innerHTML = `<span class="spinner"></span> Putaran ${++rounds}: Gemini sedang menulis ulang pengecoh…`;
+        const d = await api('/generate?type=samarkan', { method: 'POST', body: {} });
+        total += d.fixed; paint(d);
+        if (d.quota) { out.textContent = `⏸️ Kuota Gemini habis. ${total} soal disamarkan di sesi ini — lanjutkan nanti.`; break; }
+        if (!d.remaining || (!d.fixed && !d.failed)) { out.textContent = `✅ Selesai. ${total} soal disamarkan di sesi ini.`; break; }
+        out.textContent = `${total} soal disamarkan… jeda sebentar agar kuota aman.`;
+        await new Promise(r => setTimeout(r, 4000));
+      }
+      if (stop) out.textContent = `⏹️ Dihentikan. ${total} soal disamarkan di sesi ini.`;
+    } catch (e) { out.textContent = `⚠️ ${e.message}`; }
+    run.disabled = false; st.hidden = true;
+  };
 }
 
 // kembali dari halaman bayar Midtrans → arahkan ke halaman langganan dengan status yang sesuai

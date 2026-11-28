@@ -1707,3 +1707,10 @@ body.intro-open { overflow: hidden; }
 .legal-sec a,.legal-links a{color:var(--cyan);text-decoration:underline;text-underline-offset:2px}
 .legal-contact{list-style:none;padding:0!important}
 .legal-links.sm{font-size:12.5px}
+.disg-track{height:8px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden}
+.disg-track i{display:block;height:100%;width:0;background:var(--grad);transition:width .6s}
+/* simulasi: soal interaktif — tanda benar/salah disembunyikan sampai simulasi selesai */
+.sim-ix .right, .sim-ix .wrong, .sim-ix .ok, .sim-ix .bad { border-color: var(--line, rgba(255,255,255,.18)) !important; background: rgba(255,255,255,.08) !important; color: inherit !important; box-shadow: none !important; }
+.sim-ix .mark, .sim-ix .ix-mark { display: none !important; }
+.ix-saved { margin-top: 14px; padding: 14px; border-radius: 14px; background: rgba(52,211,153,.12); border: 1px solid rgba(52,211,153,.35); font-weight: 600; }
+.sim-ix .dimmed { opacity: 1 !important; }

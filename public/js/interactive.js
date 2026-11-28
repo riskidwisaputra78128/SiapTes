@@ -30,6 +30,16 @@ const round = (v, step) => Math.round(v / step) * step;
 const fmtNum = (v, step) => (step < 1 ? v.toFixed(String(step).split('.')[1]?.length || 1).replace('.', ',') : fmt(v));
 
 export const IX_KIND = KIND;
+/** Ringkasan jawaban benar soal interaktif (untuk pembahasan). */
+export function ixAnswerHTML(q) {
+  return q.kind === 'match' ? q.pairs.map(p => `${esc(p.a)} → ${esc(p.b)}`).join('<br>')
+    : q.kind === 'sort' ? q.buckets.map(b => `<b>${esc(b.name)}:</b> ${b.items.map(esc).join(', ')}`).join('<br>')
+    : q.kind === 'chart' ? q.chart.labels.map((l, k) => `${esc(l)} = ${q.chart.values[k]}`).join(' · ') + ' ' + esc(q.chart.unit || '')
+    : q.kind === 'fill' ? esc(String(q.text || '').split('___').map((p, k, a) => p + (k < a.length - 1 ? `[${q.blanks[k]}]` : '')).join(''))
+    : q.kind === 'tf' ? q.statements.map(s => `${s.v ? '✓' : '✗'} ${esc(s.t)}`).join('<br>')
+    : q.kind === 'odd' ? `Yang berbeda: <b>${esc(q.items[q.odd])}</b>`
+    : q.kind === 'words' ? esc(q.items.join(' ')) : (q.items || []).map((t, k) => `${k + 1}. ${esc(t)}`).join('<br>');
+}
 // dipakai Duel: pasang mesin interaktif ke elemen stage
 export function mountEngine(stage, q, api) {
   return ({ order: orderEngine, words: orderEngine, match: matchEngine, sort: sortEngine, chart: chartEngine, fill: fillEngine, tf: tfEngine, odd: oddEngine }[q.kind] || orderEngine)(stage, q, api);
