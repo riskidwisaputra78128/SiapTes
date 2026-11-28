@@ -19,8 +19,8 @@ export async function bindAdSlots() {
   const draw = () => {
     const a = ads[i];
     seen.add(a.id);
-    el.innerHTML = `<a class="glass ad-card fade-in" href="${esc(a.link)}" target="_blank" rel="noopener sponsored" data-ad="${esc(a.id)}">
-      ${a.img ? `<img src="${esc(a.img)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : '<span class="ad-ico">📢</span>'}
+    el.innerHTML = `<a class="glass ad-card fade-in ${a.img && a.wide ? 'wide' : ''}" href="${esc(a.link)}" target="_blank" rel="noopener sponsored" data-ad="${esc(a.id)}">
+      ${a.img ? `<img class="${a.wide ? 'ad-banner' : ''}" src="${esc(a.img)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : '<span class="ad-ico">📢</span>'}
       <span class="ad-body"><small class="ad-label">Promosi</small><b>${esc(a.title)}</b>${a.text ? `<span class="dim">${esc(a.text)}</span>` : ''}</span>
       <span class="btn sm ad-cta">${esc(a.cta || 'Lihat promo')}</span></a>
       ${ads.length > 1 ? `<div class="ad-dots">${ads.map((_, k) => `<i class="${k === i ? 'on' : ''}"></i>`).join('')}</div>` : ''}`;
@@ -85,22 +85,58 @@ export async function renderAds(app) {
   load();
 }
 
-// kecilkan gambar di browser: lebar maks. 1200px, WebP (fallback JPEG) — hemat kuota & cepat tampil
-async function shrink(file) {
+// ✂️ Alat potong gambar: geser (drag), perbesar (slider / scroll / cubit), pilih rasio → kanvas WebP terkompres
+function openCrop(el, file, done) {
+  const box = $('#aCrop', el), frame = $('#aFrame', el), im = $('#aCropImg', el), zoomEl = $('#aZoom', el);
   const url = URL.createObjectURL(file);
-  try {
-    const im = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = url; });
-    const scale = Math.min(1, 1200 / im.naturalWidth);
-    const c = document.createElement('canvas');
-    c.width = Math.round(im.naturalWidth * scale); c.height = Math.round(im.naturalHeight * scale);
-    c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
-    for (const q of [0.82, 0.7, 0.55, 0.4]) {
-      let d = c.toDataURL('image/webp', q);
-      if (!d.startsWith('data:image/webp')) d = c.toDataURL('image/jpeg', q);
-      if (d.length < 850000) return d;
+  let ratio = 3, z = 1, x = 0, y = 0, base = 1;   // x,y = geser (px layar) dari tengah
+  const fw = () => frame.clientWidth, fh = () => frame.clientHeight;
+  const clamp = () => {
+    const w = im.naturalWidth * base * z, h = im.naturalHeight * base * z;
+    const mx = Math.max(0, (w - fw()) / 2), my = Math.max(0, (h - fh()) / 2);
+    x = Math.min(mx, Math.max(-mx, x)); y = Math.min(my, Math.max(-my, y));
+  };
+  const paint = () => {
+    clamp();
+    im.style.width = im.naturalWidth * base * z + 'px';
+    im.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
+    $('#aZoomTxt', el).textContent = Math.round(z * 100) + '%';
+  };
+  const fit = () => { frame.style.aspectRatio = String(ratio); requestAnimationFrame(() => { base = Math.max(fw() / im.naturalWidth, fh() / im.naturalHeight); paint(); }); };
+  im.onload = () => { box.hidden = false; $('#aPrev', el).hidden = true; fit(); };
+  im.onerror = () => { toast('Gambar tidak bisa dibaca', 'err'); close(); };
+  im.src = url;
+  $$('#aRatio button', el).forEach(b => (b.onclick = () => { ratio = +b.dataset.r; $$('#aRatio button', el).forEach(o => o.classList.toggle('on', o === b)); x = y = 0; fit(); }));
+  zoomEl.value = 1; zoomEl.oninput = () => { z = +zoomEl.value; paint(); };
+  frame.onwheel = e => { e.preventDefault(); z = Math.min(4, Math.max(1, z * (e.deltaY < 0 ? 1.08 : 0.93))); zoomEl.value = z; paint(); };
+  // geser & cubit (pointer events)
+  const pts = new Map(); let pinch = 0;
+  frame.onpointerdown = e => { frame.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]); if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = Math.hypot(a[0] - b[0], a[1] - b[1]) / z; } };
+  frame.onpointermove = e => {
+    if (!pts.has(e.pointerId)) return;
+    const [px, py] = pts.get(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]);
+    if (pts.size === 2 && pinch) { const [a, b] = [...pts.values()]; z = Math.min(4, Math.max(1, Math.hypot(a[0] - b[0], a[1] - b[1]) / pinch)); zoomEl.value = z; }
+    else { x += e.clientX - px; y += e.clientY - py; }
+    paint();
+  };
+  frame.onpointerup = frame.onpointercancel = e => { pts.delete(e.pointerId); if (pts.size < 2) pinch = 0; };
+  function close() { URL.revokeObjectURL(url); box.hidden = true; $('#aPrev', el).hidden = false; }
+  $('#aCropCancel', el).onclick = close;
+  $('#aCropOk', el).onclick = () => {
+    const s = base * z;                                   // skala gambar asli → layar
+    const sw = fw() / s, sh = fh() / s;                   // area potong dalam piksel asli
+    const sx = (im.naturalWidth - sw) / 2 - x / s, sy = (im.naturalHeight - sh) / 2 - y / s;
+    const outW = ratio >= 2 ? 1200 : 800, outH = Math.round(outW / ratio);
+    const c = document.createElement('canvas'); c.width = outW; c.height = outH;
+    c.getContext('2d').drawImage(im, sx, sy, sw, sh, 0, 0, outW, outH);
+    let data = '';
+    for (const q of [0.85, 0.72, 0.58, 0.45]) {
+      data = c.toDataURL('image/webp', q);
+      if (!data.startsWith('data:image/webp')) data = c.toDataURL('image/jpeg', q);
+      if (data.length < 850000) break;
     }
-    throw new Error('besar');
-  } finally { URL.revokeObjectURL(url); }
+    close(); done(data, ratio >= 2);
+  };
 }
 
 function editAd(a, onDone) {
@@ -111,11 +147,18 @@ function editAd(a, onDone) {
     <div class="field"><label>Link promosi (https://…)</label><input class="input" id="aLink" type="url" placeholder="https://contoh.com/promo" value="${esc(a?.link || '')}"></div>
     <div class="field"><label>Gambar banner (opsional)</label>
       <div class="ad-img-pick">
-        <div class="ad-img-prev" id="aPrev">${a?.img ? `<img src="${esc(a.img)}" alt="">` : '<span>Belum ada gambar</span>'}</div>
+        <div class="ad-img-prev ${a?.wide ? 'wide' : 'box'}" id="aPrev">${a?.img ? `<img src="${esc(a.img)}" alt="">` : '<span>Belum ada gambar</span>'}</div>
+        <div class="ad-crop" id="aCrop" hidden>
+          <div class="seg ad-crop-ratio" id="aRatio"><button data-r="3" class="on">▭ Banner lebar 3:1</button><button data-r="1.333">▢ Kotak 4:3</button><button data-r="1">◻ Persegi 1:1</button></div>
+          <div class="ad-crop-frame" id="aFrame"><img id="aCropImg" alt="" draggable="false"></div>
+          <div class="row" style="gap:10px;align-items:center"><span>🔍</span><input type="range" id="aZoom" min="1" max="4" step="0.01" value="1" style="flex:1"><span class="dim" id="aZoomTxt">100%</span></div>
+          <p class="dim" style="margin:0;font-size:12px">Geser gambar untuk mengatur posisi · scroll / cubit / slider untuk memperbesar.</p>
+          <div class="row" style="gap:8px"><button type="button" class="btn sm ghost" id="aCropCancel" style="flex:1">Batal</button><button type="button" class="btn sm" id="aCropOk" style="flex:2">✂️ Pakai potongan ini</button></div>
+        </div>
         <div class="row wrap" style="gap:8px"><label class="btn sm ghost" style="cursor:pointer">📤 Upload gambar<input type="file" id="aFile" accept="image/jpeg,image/png,image/webp" hidden></label>
           <button type="button" class="btn sm ghost" id="aImgClear" ${a?.img ? '' : 'hidden'}>🗑️ Hapus gambar</button></div>
         <input class="input" id="aImg" type="url" placeholder="…atau tempel link gambar https://…/banner.jpg" value="${esc(a?.img && !a.img.startsWith('/api/') ? a.img : '')}">
-        <small class="dim" id="aImgInfo">JPG/PNG/WebP. Otomatis dikecilkan (lebar maks. 1200px). Rasio ideal 3:1, mis. 1200×400.</small>
+        <small class="dim" id="aImgInfo">JPG/PNG/WebP. Setelah memilih gambar, atur potongannya: banner lebar (tampil penuh di atas iklan) atau kotak (thumbnail kecil).</small>
       </div></div>
     <div class="field"><label>Teks tombol</label><input class="input" id="aCta" maxlength="24" value="${esc(a?.cta || 'Lihat promo')}"></div>
     <div class="row wrap" style="gap:10px"><div class="field" style="flex:1"><label>Mulai tayang</label><input class="input" id="aStart" type="date" value="${toInput(a?.start)}"></div>
@@ -128,18 +171,23 @@ function editAd(a, onDone) {
     // gambar: imgData = hasil upload baru; keep = URL gambar upload lama (dipakai bila tidak diganti)
     let imgData = '', keep = a?.img && a.img.startsWith('/api/') ? a.img : '';
     const prev = src => { $('#aPrev', el).innerHTML = src ? `<img src="${esc(src)}" alt="">` : '<span>Belum ada gambar</span>'; $('#aImgClear', el).hidden = !src; };
-    $('#aFile', el).onchange = async e => {
+    let wide = !!a?.wide;
+    $('#aFile', el).onchange = e => {
       const f = e.target.files?.[0]; if (!f) return;
       if (f.size > 15 * 1024 * 1024) return toast('File terlalu besar (maks. 15 MB)', 'err');
-      try { imgData = await shrink(f); keep = ''; $('#aImg', el).value = ''; prev(imgData); $('#aImgInfo', el).textContent = `✅ Siap di-upload (${Math.round(imgData.length * 0.75 / 1024)} KB setelah dikompres)`; }
-      catch { toast('Gambar tidak bisa dibaca', 'err'); }
+      openCrop(el, f, (data, isWide) => {
+        imgData = data; wide = isWide; keep = ''; $('#aImg', el).value = '';
+        $('#aPrev', el).className = 'ad-img-prev ' + (wide ? 'wide' : 'box'); prev(imgData);
+        $('#aImgInfo', el).textContent = `✅ Siap di-upload (${Math.round(imgData.length * 0.75 / 1024)} KB) · tampil sebagai ${wide ? 'banner lebar' : 'thumbnail kotak'}`;
+      });
+      e.target.value = '';
     };
     $('#aImg', el).oninput = () => { const v = $('#aImg', el).value.trim(); if (v) { imgData = ''; keep = ''; } prev(v || imgData || keep); };
     $('#aImgClear', el).onclick = () => { imgData = ''; keep = ''; $('#aImg', el).value = ''; $('#aFile', el).value = ''; prev(''); };
     $('#aSave', el).onclick = async () => {
       const btn = $('#aSave', el); btn.disabled = true;
       try {
-        await api('/presence?op=ads', { method: 'POST', body: { action: 'save', id: a?.id, active: a ? a.active : true, title: $('#aTitle', el).value, text: $('#aText', el).value, link: $('#aLink', el).value, img: $('#aImg', el).value.trim() || keep, imgData, cta: $('#aCta', el).value, start: fromInput($('#aStart', el).value), end: fromInput($('#aEnd', el).value, true), tiers: [...t] } });
+        await api('/presence?op=ads', { method: 'POST', body: { action: 'save', id: a?.id, active: a ? a.active : true, title: $('#aTitle', el).value, text: $('#aText', el).value, link: $('#aLink', el).value, img: $('#aImg', el).value.trim() || keep, imgData, wide: $('#aImg', el).value.trim() ? false : wide, cta: $('#aCta', el).value, start: fromInput($('#aStart', el).value), end: fromInput($('#aEnd', el).value, true), tiers: [...t] } });
         close(); toast('Iklan disimpan — tampil di beranda dalam ±1 menit', 'ok'); onDone?.();
       } catch (e) { toast(e.message, 'err'); btn.disabled = false; }
     };
