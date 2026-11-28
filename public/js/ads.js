@@ -16,13 +16,7 @@ export async function bindAdSlots() {
   el.hidden = false;
   let i = 0;
   const seen = new Set();
-  // gelembung dekoratif yang melayang naik-turun di latar kartu (posisi/ukuran/tempo acak per kartu)
-  const bubbles = () => `<span class="ad-bubbles" aria-hidden="true">${Array.from({ length: 7 }, () => {
-    const sz = 8 + Math.random() * 26;
-    return `<i style="left:${Math.round(Math.random() * 92)}%;width:${sz.toFixed(0)}px;height:${sz.toFixed(0)}px;animation-duration:${(4 + Math.random() * 5).toFixed(1)}s;animation-delay:-${(Math.random() * 6).toFixed(1)}s"></i>`;
-  }).join('')}</span>`;
   const card = a => `<a class="glass ad-card ${a.img && a.wide ? 'wide' : ''}" href="${esc(a.link)}" target="_blank" rel="noopener sponsored" data-ad="${esc(a.id)}" draggable="false">
-      ${bubbles()}
       ${a.img ? `<img class="${a.wide ? 'ad-banner' : ''}" src="${esc(a.img)}" alt="" loading="lazy" draggable="false" referrerpolicy="no-referrer" onerror="this.remove()">` : '<span class="ad-ico">📢</span>'}
       <span class="ad-body"><small class="ad-label">Promosi</small><b>${esc(a.title)}</b>${a.text ? `<span class="dim">${esc(a.text)}</span>` : ''}</span>
       <span class="btn sm ad-cta">${esc(a.cta || 'Lihat promo')}</span></a>`;
