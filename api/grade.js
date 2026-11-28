@@ -97,7 +97,7 @@ Aturan menjawab:
 ${history && !shareable ? `\nPercakapan sebelumnya:\n${history}\n` : ''}
 Pertanyaan peserta: ${message}
 
-Format JSON: {"answer":"...","followups":["pertanyaan lanjutan singkat 1","... 2","... 3"]}`, { deadline: Date.now() + 24000, prefer: 'lite' });
+Format JSON: {"answer":"...","followups":["pertanyaan lanjutan singkat 1","... 2","... 3"]}`, { deadline: Date.now() + 24000, prefer: 'lite', feature: 'mentor-ai' });
   const answer = String(out.answer || '').trim().slice(0, 2500);
   if (!answer) throw httpError(502, 'AI tidak memberi jawaban, coba ulangi pertanyaannya.');
   const followups = (out.followups || []).map(x => String(x).slice(0, 90)).filter(Boolean).slice(0, 3);
@@ -152,7 +152,7 @@ Kembalikan JSON persis dengan format:
  "covered": ["poin kunci yang maksudnya sudah tercakup"],
  "missed": ["poin kunci yang belum tercakup"],
  "corrections": [{"issue": "bagian jawaban yang keliru/kurang tepat (kutip singkat)", "fix": "koreksi yang benar"}],
- "improved": "versi jawaban peserta yang sudah diperbaiki, 3-6 kalimat"}`, { deadline: Date.now() + 26000 });
+ "improved": "versi jawaban peserta yang sudah diperbaiki, 3-6 kalimat"}`, { deadline: Date.now() + 26000, feature: 'nilai-esai' });
       const score = Math.max(0, Math.min(100, Math.round(Number(out.score) || 0)));
       return send(res, 200, {
         score,

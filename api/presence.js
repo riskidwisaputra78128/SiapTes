@@ -5,6 +5,8 @@ import { handle, readBody, send, query, httpError } from './_lib/http.js';
 import { avatarRoute } from './_lib/avatar-route.js';
 import { feedbackRoute } from './_lib/feedback-route.js';
 import { adsRoute } from './_lib/ads.js';
+import { recordActive, quotaReport } from './_lib/quota.js';
+import { aiModelsInfo } from './_lib/ai.js';
 
 // Pengaturan situs (khusus admin): tema default untuk pengguna yang belum memilih tema sendiri
 const THEME_KEYS = ['dark', 'light', 'dongeng', 'modern', 'senja', 'fajar', 'malam', 'pagi', 'sakura', 'shinobi', 'kosmik', 'pro'];
@@ -12,7 +14,7 @@ const settingsRoute = handle(['POST'], async (req, res) => {
   if (!isAdmin(requireUser(req))) throw httpError(403, 'Khusus admin');
   const b = await readBody(req);
   const patch = {};
-  if (b.defaultTheme !== undefined) { if (!THEME_KEYS.includes(b.defaultTheme)) throw httpError(400, 'Tema tidak dikenal'); patch.defaultTheme = b.defaultTheme; }
+  if (b.defaultTheme !== undefined) { if (!THEME_KEYS.includes(b.defaultTheme)) throw httpError(400, 'Tema tidak dikenal'); patch.defaultTheme = b.defaultTheme; patch.dtv = 2; }
   if (b.tutorEnabled !== undefined) patch.tutorEnabled = !!b.tutorEnabled;
   if (b.tutorDaily !== undefined) { const n = parseInt(b.tutorDaily, 10); if (!(n >= 1 && n <= 200)) throw httpError(400, 'Batas harian 1–200'); patch.tutorDaily = n; }
   if (!Object.keys(patch).length) throw httpError(400, 'Tidak ada pengaturan yang diubah');
@@ -77,6 +79,7 @@ const presenceRoute = handle(['GET', 'POST'], async (req, res) => {
     };
     await db.setPresence(user.uid, rec);
     presUpsert(user.uid, rec);
+    recordActive(db, user.uid).catch(() => {});
   }
   const [list, kantor, t] = await Promise.all([onlineList(db, user.uid), canKantor(db, user).catch(() => isAdmin(user)), tierOf(db, user).catch(() => null)]);
   // admin: pembayaran terbaru (untuk notifikasi "pembayaran masuk")
@@ -84,11 +87,29 @@ const presenceRoute = handle(['GET', 'POST'], async (req, res) => {
   send(res, 200, { count: list.length, users: list, hidden: !!b.hidden, kantor, tier: t?.tier, until: t?.until, trial: t?.src === 'trial', lastPay });
 });
 
+// 📊 Kuota & kapasitas (khusus admin). GET → laporan · POST { aiLimits: {model: batasHarian} }
+const quotaRoute = handle(['GET', 'POST'], async (req, res) => {
+  const user = requireUser(req);
+  if (!isAdmin(user)) throw httpError(403, 'Khusus admin');
+  const db = await getDB();
+  if (req.method === 'POST') {
+    const b = await readBody(req);
+    const lim = {};
+    for (const [k, v] of Object.entries(b.aiLimits || {}).slice(0, 20)) { const n = Math.round(Number(v)); if (k.length <= 80 && n >= 0 && n <= 1e6) lim[k] = n; }
+    await db.setMetaField('settings', 'aiLimits', lim);
+    return send(res, 200, { ok: true, aiLimits: lim });
+  }
+  const [online, models] = await Promise.all([presenceAll(db, Date.now()).catch(() => []), aiModelsInfo().catch(() => [])]);
+  const onlineNow = online.filter(p => Date.now() - (p.lastSeen || 0) < ONLINE_MS).length;
+  send(res, 200, await quotaReport(db, { onlineNow, aiModels: models }));
+});
+
 // Foto profil ikut di endpoint ini agar total function tetap 12 (batas paket Hobby)
 export default function (req, res) {
   const q = query(req);
   if (q.get('op') === 'feedback') return feedbackRoute(req, res);
   if (q.get('op') === 'settings') return settingsRoute(req, res);
-  if (q.get('op') === 'ads') return adsRoute(req, res);   // iklan: kelola (admin) & lacak tayang/klik
+  if (q.get('op') === 'ads') return adsRoute(req, res);
+  if (q.get('op') === 'quota') return quotaRoute(req, res);   // iklan: kelola (admin) & lacak tayang/klik
   return q.get('avatar') || q.get('op') === 'avatar' ? avatarRoute(req, res) : presenceRoute(req, res);
 }

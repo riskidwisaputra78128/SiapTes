@@ -73,7 +73,7 @@ export function introCarousel(el) {
   let i = 1;
   const draw = () => {
     const s = SLIDES[i];
-    el.innerHTML = `<div class="ic-slide fade-in"><div class="intro-art sm">${ART[s.art]()}</div><div><span class="intro-tag">${s.ico} ${esc(s.tag)}</span><b>${s.title.replace(/<br>/g, ' ')}</b><p class="dim">${esc(s.text)}</p></div></div>
+    el.innerHTML = `<div class="ic-slide fade-in"><div class="ic-ico" aria-hidden="true">${s.ico}</div><div><span class="intro-tag">${s.ico} ${esc(s.tag)}</span><b>${s.title.replace(/<br>/g, ' ')}</b><p class="dim">${esc(s.text)}</p></div></div>
       <div class="intro-dots sm">${SLIDES.slice(1).map((_, k) => `<i class="${k + 1 === i ? 'on' : ''}"></i>`).join('')}</div>`;
     $$('[data-cnt]', el).forEach(n => (n.textContent = fmt(+n.dataset.cnt)));
   };

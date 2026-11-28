@@ -14,7 +14,7 @@ import { pidOf } from './_lib/avatar.js';
 import { avatarMap, avatarUrl } from './_lib/avatar.js';
 import { getDB } from './_lib/db.js';
 import { dropFromBoards } from './_lib/board.js';
-import { tierOf, setSub, subsMap, subOf, createInvoice, handleXenditWebhook, handleMidtransNotif, applyPayment, listPayments, pricesOf, usageSummary, trialUsed, startTrial, checkRefCode, refCodes, saveRefCode, deleteRefCode, TRIAL_DAYS, gateway, gatewayTest, payReady, TIER_NAME } from './_lib/plan.js';
+import { tierOf, setSub, subsMap, subOf, createInvoice, handleXenditWebhook, handleMidtransNotif, applyPayment, listPayments, pricesOf, usageSummary, trialUsed, startTrial, checkMyInvoices, checkRefCode, refCodes, saveRefCode, deleteRefCode, TRIAL_DAYS, gateway, gatewayTest, payReady, TIER_NAME } from './_lib/plan.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const ACTIONS = ['login', 'register', 'forgot', 'reset'];
@@ -164,6 +164,12 @@ async function subAction(req, res, b) {
     const proto = req.headers['x-forwarded-proto'] || 'https';
     const origin = process.env.APP_URL || `${proto}://${req.headers['x-forwarded-host'] || req.headers.host}`;
     return send(res, 200, await createInvoice(db, user, b.plan, origin.replace(/\/$/, '')));
+  }
+  if (b.action === 'sub-check') {
+    // dipanggil halaman Langganan sambil menunggu: cek status bayar langsung ke Midtrans
+    const checked = await checkMyInvoices(db, user, String(b.orderId || '').slice(0, 80)).catch(() => []);
+    const t = await tierOf(db, user, true);
+    return send(res, 200, { tier: t.tier, until: t.until, checked: checked.map(c => ({ id: c.id, status: c.paid ? 'PAID' : c.status || '' })) });
   }
   if (b.action === 'sub-trial') {
     const sub = await startTrial(db, user, b.code);

@@ -8,7 +8,7 @@ export const TIER_ICO = { guest: '👀', free: '🌱', plus: '⭐', pro: '👑' 
 const INF = 1e9;
 export const LIMITS = {
   guest: { practice: false, sessions: 0, maxCount: 0, levels: [], modes: [], sims: {}, tutor: 0, duelPerDay: 0, dailyMaterials: 0, interactive: false, psikotes: false, evalDetail: false, ads: 'full' },
-  free: { practice: true, sessions: 3, maxCount: 10, levels: ['easy', 'normal'], modes: ['pg', 'game'], sims: { skd: 1 }, tutor: 3, duelPerDay: 3, dailyMaterials: 3, interactive: false, psikotes: 'lite', evalDetail: false, ads: 'full' },
+  free: { practice: true, sessions: 3, maxCount: 10, levels: ['easy', 'normal'], modes: ['pg', 'game'], sims: {}, tutor: 3, duelPerDay: 3, dailyMaterials: 3, interactive: false, psikotes: 'lite', evalDetail: false, ads: 'full' },
   plus: { practice: true, sessions: INF, maxCount: 30, levels: ['easy', 'normal', 'hard'], modes: ['pg', 'game', 'essay', 'interaktif'], sims: { skd: INF, telkom: INF, bi: 2, ojk: 2 }, tutor: 20, duelPerDay: INF, dailyMaterials: INF, interactive: true, psikotes: 'full', evalDetail: true, ads: 'less' },
   pro: { practice: true, sessions: INF, maxCount: 50, levels: ['easy', 'normal', 'hard', 'prof'], modes: ['pg', 'game', 'essay', 'interaktif'], sims: { skd: INF, telkom: INF, bi: INF, ojk: INF }, tutor: 60, duelPerDay: INF, dailyMaterials: INF, interactive: true, psikotes: 'full', evalDetail: true, ads: 'none' },
 };
@@ -59,7 +59,7 @@ const FEATURES = [
   ['📝 Latihan PG & Arena', '—', '10 soal · 3 sesi/hari', 'Tanpa batas', 'Tanpa batas'],
   ['🔥 Level', '—', 'Easy–Normal', 's.d. Hard', 'Semua (Prof)'],
   ['✍️ Esai & Interaktif', '—', '—', '✓', '✓'],
-  ['🎯 Simulasi seleksi', '—', 'CPNS 1×/minggu', 'CPNS & Telkom ∞ · BI/OJK 2×/mgg', 'Semua tanpa batas'],
+  ['🎯 Simulasi seleksi', '—', '—', 'CPNS & Telkom ∞ · BI/OJK 2×/mgg', 'Semua tanpa batas'],
   ['🧠 Tes Psikologi', '—', 'Versi singkat', 'Lengkap', 'Lengkap'],
   ['⚔️ Duel', 'Menonton', '3 room/hari', 'Tanpa batas', 'Tanpa batas'],
   ['🤖 Mentor AI', '—', '3/hari', '20/hari', '60/hari'],
@@ -114,6 +114,28 @@ export function subBanner() {
   return `<a class="glass sub-banner" href="#/langganan"><span>⏰</span><span><b>Langganan ${TIER_NAME[u.tier]} berakhir ${d === 1 ? 'besok' : `${d} hari lagi`}</b> (${untilText(u.until)}). Perpanjang sekarang agar akses tidak terputus.</span><b class="grad-text">Perpanjang →</b></a>`;
 }
 
+// Saran upgrade di Beranda: Free → Plus, Plus → Pro (bisa ditutup, muncul lagi 3 hari kemudian)
+const NUDGE = {
+  free: { to: 'plus', ico: '⭐', title: 'Buka semua latihan dengan Plus', text: 'Latihan tanpa batas s.d. level Hard, esai & 8 permainan, simulasi CPNS & Telkom tanpa batas, materi interaktif penuh.', cta: 'Lihat Plus' },
+  plus: { to: 'pro', ico: '👑', title: 'Naik ke Pro, siap tempur penuh', text: 'Level Prof, 50 soal per sesi, simulasi BI & OJK tanpa batas, Mentor AI 60×/hari, dan tanpa iklan.', cta: 'Lihat Pro' },
+};
+const nudgeKey = () => 'sl_nudge:' + (session.user?.uid || '');
+export function upgradeNudge() {
+  const u = session.user;
+  if (!session.loggedIn || !u || u.admin) return '';
+  const t = tierNow(), n = NUDGE[t];
+  if (!n) return '';
+  try { if (Date.now() - (+localStorage.getItem(nudgeKey()) || 0) < 3 * 86400000) return ''; } catch {}
+  const trial = t === 'free' ? '<br><span class="nudge-hint">🎁 Punya kode referal? Coba Plus gratis di halaman Langganan.</span>' : '';
+  return `<div class="glass nudge ${n.to}" id="upNudge"><span class="nudge-ico">${n.ico}</span>
+    <div class="nudge-txt"><b>${n.title}</b><p>${n.text}${trial}</p></div>
+    <div class="nudge-act"><a class="btn sm" href="#/langganan?need=${n.to}">${n.cta}</a><button class="nudge-x" aria-label="Tutup saran">✕</button></div></div>`;
+}
+export function bindUpgradeNudge() {
+  const el = $('#upNudge'); if (!el) return;
+  $('.nudge-x', el).onclick = () => { try { localStorage.setItem(nudgeKey(), String(Date.now())); } catch {} el.classList.add('out'); setTimeout(() => el.closest('.section')?.remove(), 300); };
+}
+
 // Halaman #/langganan
 export async function renderLangganan(app, params) {
   const t = tierNow(), u = session.user;
@@ -152,7 +174,7 @@ export async function renderLangganan(app, params) {
         : cur === 'free' ? (me?.expired ? `Langganan ${TIER_NAME[me.expired]} kamu sudah berakhir. Perpanjang untuk membuka lagi semua fitur.` : 'Kamu memakai paket Free. Upgrade untuk latihan tanpa batas dan semua simulasi.')
         : u?.admin ? 'Akun admin memiliki akses penuh.' : me?.trial ? `🎁 <b>Trial ${TIER_NAME[cur]} gratis</b> aktif sampai <b>${untilText(until)}</b> · sisa ${Math.max(0, daysLeft(until))} hari. Setelah trial habis, akun kembali ke Free — beli Plus agar akses tidak terputus (sisa trial tetap terhitung).` : `Aktif sampai <b>${untilText(until)}</b>${until ? ` · sisa ${Math.max(0, daysLeft(until))} hari` : ''}.`}</p>
       ${why ? `<p class="gate-why">🔒 ${esc(why)}</p>` : ''}
-      ${me?.usage && cur === 'free' ? `<p class="dim" style="margin:8px 0 0;font-size:13px">Hari ini: ${me.usage.sessions}/3 sesi latihan · ${me.usage.duels}/3 room duel · Simulasi CPNS minggu ini: ${me.usage.sims?.skd || 0}/1</p>` : ''}
+      ${me?.usage && cur === 'free' ? `<p class="dim" style="margin:8px 0 0;font-size:13px">Hari ini: ${me.usage.sessions}/3 sesi latihan · ${me.usage.duels}/3 room duel</p>` : ''}
     </div>
     ${me?.trialAvailable && cur === 'free' ? `<div class="glass card trial-card"><div class="trial-ico">🎁</div><div><b>Punya kode referal? Coba Plus gratis</b><p class="muted" style="margin:4px 0 0">Masukkan kode referal untuk membuka trial Plus ${me.trialDays || 3} hari tanpa bayar. Setelah habis, akun otomatis kembali ke Free. Hanya sekali per akun.</p></div><div class="trial-form"><input class="input" id="trialCode" maxlength="32" placeholder="Kode referal" autocomplete="off"><button class="btn" id="trialBtn">Pakai kode</button></div></div>` : ''}
     <div class="plan-grid">${card('plus', 'Paling populer')}${card('pro', 'Terlengkap')}</div>
@@ -182,9 +204,12 @@ export async function renderLangganan(app, params) {
     let n = 0;
     const tick = async () => {
       if (!document.body.contains($('#payWait'))) return;
-      try { const d = await refreshMe(true); if (d && d.tier !== 'free' && d.tier !== cur) { toast(`${TIER_ICO[d.tier]} Paket ${TIER_NAME[d.tier]} aktif!`, 'ok'); confetti(140); return renderLangganan(app, new URLSearchParams()); } } catch {}
+      try {
+        const c = await api('/auth', { method: 'POST', body: { action: 'sub-check', orderId: params.get('order') || '' } }).catch(() => null);
+        const d = c && c.tier !== cur ? await refreshMe(true) : c;
+        if (d && d.tier !== 'free' && d.tier !== cur) { toast(`${TIER_ICO[d.tier]} Paket ${TIER_NAME[d.tier]} aktif!`, 'ok'); confetti(140); return renderLangganan(app, new URLSearchParams()); } } catch {}
       if (++n < (paid === 'pending' ? 100 : 20)) setTimeout(tick, paid === 'pending' ? 6000 : 3000);
-      else $('#payWait').innerHTML = '⏳ Konfirmasi pembayaran belum masuk. Jika sudah membayar, paket aktif otomatis begitu payment gateway mengonfirmasi — atau hubungi admin.';
+      else { $('#payWait').innerHTML = '⏳ Konfirmasi pembayaran belum masuk. Jika sudah membayar, tekan tombol di bawah untuk cek ulang — atau hubungi admin.<br><button class="btn sm" id="payRecheck" style="margin-top:10px">🔄 Cek status pembayaran</button>'; $('#payRecheck').onclick = () => { n = 0; $('#payWait').innerHTML = '<span class="spinner"></span> Mengecek ke Midtrans…'; tick(); }; }
     };
     setTimeout(tick, 2000);
   }

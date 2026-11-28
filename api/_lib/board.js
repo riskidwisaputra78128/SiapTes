@@ -6,7 +6,7 @@ import { startOfWeekWIB, startOfMonthWIB } from './http.js';
 
 export const PERIODS = ['week', 'month'];
 const startOf = (period, ms) => (period === 'month' ? startOfMonthWIB(ms) : startOfWeekWIB(ms));
-export const boardKey = (period, ms) => `lb-${period}-${startOf(period, ms)}`;
+export const boardKey = (period, ms) => `lb2-${period}-${startOf(period, ms)}`;
 const fieldOf = uid => 'u' + crypto.createHash('sha1').update(String(uid)).digest('hex').slice(0, 20);
 const shortName = n => String(n || 'Peserta').slice(0, 40);
 

@@ -17,7 +17,7 @@ const INF = 1e9;
 // Hak akses tiap paket (cerminannya ada di public/js/plan.js)
 export const LIMITS = {
   guest: { practice: false, sessions: 0, maxCount: 0, levels: [], modes: [], sims: {}, tutor: 0, duelPerDay: 0, dailyMaterials: 0, essay: false },
-  free: { practice: true, sessions: 3, maxCount: 10, levels: ['easy', 'normal'], modes: ['pg', 'game'], sims: { skd: 1 }, tutor: 3, duelPerDay: 3, dailyMaterials: 3, essay: false },
+  free: { practice: true, sessions: 3, maxCount: 10, levels: ['easy', 'normal'], modes: ['pg', 'game'], sims: {}, tutor: 3, duelPerDay: 3, dailyMaterials: 3, essay: false },
   plus: { practice: true, sessions: INF, maxCount: 30, levels: ['easy', 'normal', 'hard'], modes: ['pg', 'game', 'essay', 'interaktif'], sims: { skd: INF, telkom: INF, bi: 2, ojk: 2 }, tutor: 20, duelPerDay: INF, dailyMaterials: INF, essay: true },
   pro: { practice: true, sessions: INF, maxCount: 50, levels: ['easy', 'normal', 'hard', 'prof'], modes: ['pg', 'game', 'essay', 'interaktif'], sims: { skd: INF, telkom: INF, bi: INF, ojk: INF }, tutor: 60, duelPerDay: INF, dailyMaterials: INF, essay: true },
 };
@@ -265,6 +265,38 @@ export async function handleMidtransNotif(db, body) {
   });
 }
 
+/** Cadangan bila notifikasi Midtrans tidak sampai: tanya status transaksi langsung ke Midtrans (Status API). */
+const midtransApi = () => (midtransProd() ? 'https://api.midtrans.com' : 'https://api.sandbox.midtrans.com');
+export async function checkMidtransStatus(db, orderId) {
+  if (!midtransReady()) return null;
+  const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 8000);
+  try {
+    const r = await fetch(`${midtransApi()}/v2/${encodeURIComponent(orderId)}/status`, {
+      headers: { Accept: 'application/json', Authorization: 'Basic ' + Buffer.from(process.env.MIDTRANS_SERVER_KEY + ':').toString('base64') }, signal: ctrl.signal,
+    });
+    const b = await r.json().catch(() => ({}));
+    if (!r.ok || !b.transaction_status) return { status: 'UNKNOWN', code: b.status_code || r.status };
+    const ts = String(b.transaction_status);
+    const paid = ts === 'settlement' || (ts === 'capture' && (b.fraud_status || 'accept') === 'accept');
+    return applyPayment(db, {
+      external_id: orderId, status: paid ? 'PAID' : ts.toUpperCase(),
+      amount: Math.round(parseFloat(b.gross_amount || '0')),
+      payment_channel: [b.payment_type, b.va_numbers?.[0]?.bank || b.issuer || b.acquirer].filter(Boolean).join(' · ').toUpperCase(),
+    });
+  } catch { return { status: 'UNKNOWN' }; } finally { clearTimeout(t); }
+}
+/** Cek tagihan Midtrans milik pengguna yang belum lunas (maks. 3 terbaru, 3 hari terakhir). */
+export async function checkMyInvoices(db, user, orderId) {
+  const inv = (await db.getMeta('inv').catch(() => null)) || {};
+  const mine = Object.entries(inv).filter(([id, v]) => v.uid === user.uid && v.status !== 'PAID' && v.gateway === 'midtrans' && Date.now() - (v.createdAt || 0) < 3 * 86400000)
+    .sort((a, b) => (b[1].createdAt || 0) - (a[1].createdAt || 0));
+  if (orderId && inv[orderId]?.uid === user.uid) mine.unshift([orderId, inv[orderId]]);
+  const ids = [...new Set(mine.map(([id]) => id))].slice(0, 3);
+  const out = [];
+  for (const id of ids) out.push({ id, ...(await checkMidtransStatus(db, id)) });
+  return out;
+}
+
 export async function applyPayment(db, body) {
   const ext = String(body.external_id || '');
   const inv = ((await db.getMeta('inv').catch(() => null)) || {})[ext];
@@ -276,7 +308,7 @@ export async function applyPayment(db, body) {
     return { ok: true, status };
   }
   if (Number(body.amount || body.paid_amount || 0) < inv.amount) return { ok: false, error: 'Nominal pembayaran kurang' };
-  const sub = await setSub(db, { uid: inv.uid, name: inv.name, email: inv.email }, inv.plan, { days: PERIOD_DAYS, src: 'xendit' });
+  const sub = await setSub(db, { uid: inv.uid, name: inv.name, email: inv.email }, inv.plan, { days: PERIOD_DAYS, src: inv.gateway || 'xendit' });
   const paidAt = Date.now();
   await db.setMetaField('inv', ext, { ...inv, status: 'PAID', paidAt, method: body.payment_method || body.payment_channel || '', until: sub.until });
   // catatan pembayaran untuk admin (notifikasi)

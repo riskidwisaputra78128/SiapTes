@@ -140,7 +140,7 @@ Format JSON:
  "keyPoints":["poin kunci singkat"],                              // 3-5
  "glossary":[{"term":"istilah","def":"definisi singkat"}],          // 3-5
  "tips":["tips menjawab soal terkait topik ini"],                  // 2-3
- "sourceIndexes":[0,1]}`, { deadline });
+ "sourceIndexes":[0,1]}`, { deadline, feature: 'materi-harian' });
   return buildMaterial(out, cat, headlines, pics);
 }
 
@@ -196,7 +196,7 @@ Aturan:
 ${ix.map(k => IX_SPEC[k]).join('\n')}
 Format JSON:
 {"questions":[{"type":"pg","difficulty":"normal","question":"...","options":["...","...","...","..."],"answer":0,"explanation":"..."},
-${ix.map(k => IX_JSON[k]).join(',\n')}]}`, { deadline: T0 + deadlineMs });
+${ix.map(k => IX_JSON[k]).join(',\n')}]}`, { deadline: T0 + deadlineMs, feature: 'soal-harian' });
   const list = Array.isArray(out) ? out : out.questions || out.soal || out.items || [];
   const qs = list.map(q => validate(q, cat, [])).filter(Boolean);
   const saved = qs.length ? await (await getDB()).addQuestions(qs) : 0;
@@ -228,7 +228,7 @@ Format JSON:
  "keyPoints":["poin kunci singkat"],                              // 3-5
  "glossary":[{"term":"istilah","def":"definisi singkat"}],          // 3-6
  "tips":["tips menjawab soal terkait topik ini"],                  // 2-3
- "refs":["..."]}`, { deadline });
+ "refs":["..."]}`, { deadline, feature: 'materi-dasar' });
   const refs = (out.refs || []).map(x => String(x || '').trim()).filter(Boolean).slice(0, 4);
   const mat = buildMaterial(out, cat, [], [], { basis: 'dasar', topic, refs, imgTried: true });
   if (mat) await db.setMeta('matTopics', { ...hist, [cat]: [...done, topic].slice(-Math.max(1, KNOW[cat].sub.length - 2)) }).catch(() => {});
@@ -293,7 +293,7 @@ ${ix.map(k => IX_SPEC[k]).join('\n')}
 Format JSON:
 {"questions":[{"type":"pg","difficulty":"normal","question":"...","options":["...","...","...","..."],"answer":0,"explanation":"...","sourceIndex":0},
 {"type":"essay","difficulty":"hard","question":"...","keyPoints":["..."],"modelAnswer":"...","explanation":"...","sourceIndex":1},
-${ix.map(k => IX_JSON[k]).join(',\n')}]}`, { deadline: T0 + (type === 'soal' ? 55000 : 40000) });
+${ix.map(k => IX_JSON[k]).join(',\n')}]}`, { deadline: T0 + (type === 'soal' ? 55000 : 40000), feature: type === 'soal' ? 'soal-admin' : 'materi-admin' });
 
   list = Array.isArray(out) ? out : out.questions || out.soal || out.items || [];
   const qs = list.map(q => validate(q, cat, headlines)).filter(Boolean);

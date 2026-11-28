@@ -88,7 +88,7 @@ export default handle(['GET'], async (req, res) => {
     bank,
     daily,
     ads: activeAds(adsMap),
-    settings: { defaultTheme: settings?.defaultTheme || 'senja', tutorEnabled: settings?.tutorEnabled !== false, tutorDaily: settings?.tutorDaily || 20 },
+    settings: { defaultTheme: (settings?.dtv >= 2 && settings?.defaultTheme) || 'senja', tutorEnabled: settings?.tutorEnabled !== false, tutorDaily: settings?.tutorDaily || 20 },
     status: { firebase: firebaseEnabled(), ai: aiEnabled(), generatedQuestions: bank.generated, lastGenerate: last, models },
   });
 });

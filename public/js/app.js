@@ -15,7 +15,8 @@ import { applyTheme, currentTheme, openThemePicker, THEMES, applyServerDefault }
 import { mountDock, setDockVisible } from './dock.js';
 import { syncScene, sceneRoute } from './scene.js';
 import { setMood, sfx } from './sound.js';
-import { renderLangganan, tierNow, TIER_NAME, TIER_ICO, untilText, subBanner, adminSubSheet, adminPayCard, bindAdminPayCard, upgradeSheet, refreshMe } from './plan.js';
+import { quotaCard, bindQuotaCard } from './quota.js';
+import { renderLangganan, tierNow, TIER_NAME, TIER_ICO, untilText, subBanner, upgradeNudge, bindUpgradeNudge, adminSubSheet, adminPayCard, bindAdminPayCard, upgradeSheet, refreshMe } from './plan.js';
 import { renderAds, adSlot, bindAdSlots } from './ads.js';
 import { renderIntro, introCarousel, introSeen } from './intro.js';
 
@@ -331,7 +332,7 @@ async function renderHome() {
     </div>
   </section>
 
-  ${subBanner() ? `<section class="section">${subBanner()}</section>` : ''}
+  ${subBanner() ? `<section class="section">${subBanner()}</section>` : upgradeNudge() ? `<section class="section">${upgradeNudge()}</section>` : ''}
   ${adSlot('home')}
   <section class="section" id="onlineBox" hidden></section>
 
@@ -390,6 +391,7 @@ async function renderHome() {
   $('#toLogin')?.addEventListener('click', () => { session.clear(); location.hash = '#/login'; });
   onlineWidget($('#onlineBox'));
   bindAdSlots();
+  bindUpgradeNudge();
 
   getMaterials().then(d => {
     const el = $('#matStrip'); if (!el) return;
@@ -620,6 +622,7 @@ function renderProfile() {
       <p class="dim" style="margin:8px 0 0">💡 Jalankan satu per satu, beri jeda ±1 menit agar kuota Gemini tidak cepat habis.</p>
       <pre id="genOut" class="dim" style="white-space:pre-wrap;margin:12px 0 0"></pre><div id="genLinks"></div>
     </div>
+    ${quotaCard()}
     ${adminPayCard()}
     <div class="glass card" id="accCard">
       <div class="row between wrap" style="gap:10px"><h2 class="h2" style="margin:0">👥 Kelola akun</h2><span class="chip" id="accTotal">…</span></div>
@@ -714,6 +717,7 @@ function renderProfile() {
       try { await api('/presence?op=settings', { method: 'POST', body: { defaultTheme: k } }); paintDef(k); applyServerDefault(k); toast('Tema default disimpan untuk semua pengguna', 'ok'); }
       catch (e) { toast(e.message, 'err'); } finally { b.disabled = false; }
     }));
+    bindQuotaCard();
     bindAdminPayCard();
     // ── Kelola akun ──
     let accAll = [];
@@ -896,7 +900,8 @@ function renderProfile() {
   if (!q.get('midtrans')) return;
   const ts = q.get('transaction_status') || '';
   const st = ts === 'settlement' || ts === 'capture' ? 'sukses' : ts === 'pending' ? 'pending' : ts ? 'gagal' : 'pending';
-  history.replaceState(null, '', `/#/langganan?bayar=${st}`);
+  const oid = (q.get('order_id') || '').replace(/[^\w-]/g, '');
+  history.replaceState(null, '', `/#/langganan?bayar=${st}${oid ? '&order=' + oid : ''}`);
 })();
 window.addEventListener('hashchange', route);
 // akses Kantor berubah (diberi/dicabut admin) → perbarui menu tanpa memuat ulang

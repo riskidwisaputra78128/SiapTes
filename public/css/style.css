@@ -1651,3 +1651,39 @@ body.intro-open { overflow: hidden; }
 .trial-form .input{min-width:0}
 .trial-form .btn{flex:none;white-space:nowrap}
 @media (max-width:560px){.trial-card .trial-form{width:100%}}
+
+/* ── Kuota & kapasitas (admin) ── */
+.q-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:6px}
+.q-stat{padding:12px 10px;border-radius:14px;background:var(--w7,rgba(255,255,255,.05));text-align:center}
+.q-stat b{display:block;font-family:var(--num);font-size:24px}
+.q-stat span{font-size:11.5px;opacity:.75;line-height:1.3;display:block;margin-top:2px}
+.q-h{display:flex;align-items:center;gap:8px;margin:16px 0 8px;font-size:15px}
+.q-bar{margin-bottom:10px;font-size:13px}
+.q-bar .row{gap:8px;flex-wrap:wrap}
+.q-bar .track{height:9px;border-radius:999px;background:var(--w7,rgba(255,255,255,.08));overflow:hidden;margin-top:5px}
+.q-bar .track i{display:block;height:100%;border-radius:inherit;transition:width .8s ease}
+.q-bar code,.q-limrow code{font-size:12px}
+.q-note{font-size:12px;margin:4px 0 0;line-height:1.5}
+.q-feats{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.q-lim{margin-top:12px}.q-lim summary{cursor:pointer;font-size:13px}
+.q-limrow{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:6px}
+.q-limrow .input{width:110px}
+/* perbaikan intro: latar dekoratif tidak ikut tata letak grid, latar lebih pekat, kartu login pakai ikon */
+.intro-bg { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
+.intro-ov { background: color-mix(in srgb, var(--bg, #070b1a) 97%, transparent); backdrop-filter: blur(22px); }
+.intro-carousel { min-height: 0; }
+.ic-slide { grid-template-columns: 64px 1fr; gap: 14px; }
+.ic-ico { width: 64px; height: 64px; border-radius: 18px; display: grid; place-items: center; font-size: 30px; background: var(--grad); box-shadow: 0 10px 24px -10px rgba(0,0,0,.6); animation: inPop .5s cubic-bezier(.2,1.4,.4,1) both; }
+@media (max-width: 560px) { .ic-slide { grid-template-columns: 48px 1fr; text-align: left; } .ic-ico { width: 48px; height: 48px; font-size: 22px; border-radius: 14px; } }
+.intro-ov { background: #140e20; }
+:root[data-theme="light"] .intro-ov, :root[data-theme="pagi"] .intro-ov { background: rgba(246, 244, 252, .97); }
+/* ── Saran upgrade di Beranda ── */
+.nudge{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center;padding:14px 16px;border-radius:20px;transition:opacity .3s,transform .3s}
+.nudge.plus{border-color:rgba(250,204,21,.45)!important}.nudge.pro{border-color:rgba(192,132,252,.5)!important}
+.nudge.out{opacity:0;transform:translateY(-6px)}
+.nudge-ico{font-size:30px;width:52px;height:52px;display:grid;place-items:center;border-radius:16px;background:var(--grad)}
+.nudge-txt b{display:block;font-size:15px}.nudge-txt p{margin:3px 0 0;font-size:13px;line-height:1.45;opacity:.82}
+.nudge-hint{display:inline-block;margin-top:4px;font-weight:700;opacity:1}
+.nudge-act{display:flex;align-items:center;gap:6px}
+.nudge-x{background:none;border:0;color:inherit;opacity:.55;font-size:15px;cursor:pointer;padding:6px}.nudge-x:hover{opacity:1}
+@media (max-width:560px){.nudge{grid-template-columns:auto 1fr}.nudge-act{grid-column:1/-1;justify-content:space-between}.nudge-act .btn{flex:1}}

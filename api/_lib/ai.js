@@ -1,3 +1,4 @@
+import { recordAI } from './quota.js';
 // Integrasi Gemini API (REST) dengan beberapa model bergiliran.
 // - GEMINI_MODELS: daftar model dipisah koma, urut prioritas (opsional)
 //   contoh: gemini-3.6-flash,gemini-4-hydrogen,gemini-3.5-flash-lite
@@ -93,7 +94,7 @@ async function callModel(model, prompt, timeoutMs) {
  * Panggil Gemini & kembalikan JSON.
  * deadline: batas waktu absolut (ms epoch) agar tidak melewati batas durasi fungsi Vercel.
  */
-export async function geminiJSON(prompt, { deadline = Date.now() + 45000, prefer } = {}) {
+export async function geminiJSON(prompt, { deadline = Date.now() + 45000, prefer, feature = 'lain' } = {}) {
   const all = await resolveModels();
   // giliran bergantian: permintaan paralel tersebar ke model berbeda (hemat batas per menit)
   const start = rr++ % all.length;
@@ -110,10 +111,13 @@ export async function geminiJSON(prompt, { deadline = Date.now() + 45000, prefer
     if (left < 8000) break;
     const budget = i < list.length - 1 ? Math.min(left - 12000, 40000) : left;
     try {
-      return await callModel(model, prompt, Math.max(8000, budget));
+      const out = await callModel(model, prompt, Math.max(8000, budget));
+      recordAI(model, feature, 'ok');
+      return out;
     } catch (e) {
       lastErr = e;
       if (e.status === 429) {
+        recordAI(model, feature, 'limit');
         const daily = /PerDay|per day|daily/i.test(e.detail || '');
         cool.set(model, daily ? untilDailyReset() : Date.now() + 65000);
         daily ? (sawDaily = true) : (sawMinute = true);

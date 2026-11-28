@@ -1,9 +1,10 @@
 // Lapisan database: Firestore (production) atau memori (dev lokal tanpa Firebase)
 import { bumpBoards } from './board.js';
+import { countOps } from './quota.js';
 let backendPromise;
 
 export function getDB() {
-  if (!backendPromise) backendPromise = init().then(withVersions);
+  if (!backendPromise) backendPromise = init().then(countOps).then(withVersions);
   return backendPromise;
 }
 
@@ -64,7 +65,7 @@ async function init() {
   try { fs.settings({ ignoreUndefinedProperties: true }); } catch {}
   // semua panggilan Firestore dibungkus: bila kuota habis, tandai agar pengguna diberi tahu "server penuh"
   const { isQuotaErr, markQuota } = await import('./http.js');
-  const be = firestoreBackend(fs);
+  const be = firestoreBackend(fs, FieldValue);
   for (const [k, fn] of Object.entries(be)) {
     if (typeof fn !== 'function') continue;
     be[k] = async (...a) => { try { return await fn.apply(be, a); } catch (e) { if (isQuotaErr(e)) markQuota(); throw e; } };
@@ -72,7 +73,7 @@ async function init() {
   return be;
 }
 
-function firestoreBackend(fs) {
+function firestoreBackend(fs, FieldValue) {
   const Q = fs.collection('questions');
   const A = fs.collection('attempts');
   const M = fs.collection('meta');
